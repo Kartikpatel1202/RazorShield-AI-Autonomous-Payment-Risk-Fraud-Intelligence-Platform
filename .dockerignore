@@ -1,0 +1,30 @@
+# Build context for the backend image is the repository root, so the ignore
+# rules that matter for it live here (backend/.dockerignore is not consulted
+# for a root context).
+
+.git/
+.github/
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/.venv/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# Node / frontend build output (the frontend image builds from ./frontend)
+frontend/node_modules/
+frontend/dist/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Generated training data: large, and rebuilt by
+# `python -m ml.training.build_dataset`. Model artifacts under ml/models/ are
+# NOT excluded - the API needs them to serve predictions.
+ml/data/processed/
+
+docs/

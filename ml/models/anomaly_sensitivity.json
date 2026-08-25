@@ -1,0 +1,81 @@
+{
+  "method": "permutation, validation average precision",
+  "repeats": 5,
+  "features": [
+    {
+      "feature": "amount_vs_historical_average",
+      "mean_pr_auc_drop": 0.04928018602348301,
+      "std": 0.0016903171478395405
+    },
+    {
+      "feature": "amount_zscore_vs_history",
+      "mean_pr_auc_drop": 0.028158650425079756,
+      "std": 0.0006448605779869778
+    },
+    {
+      "feature": "amount",
+      "mean_pr_auc_drop": 0.024342248623422564,
+      "std": 0.0016112884062242303
+    },
+    {
+      "feature": "log_amount",
+      "mean_pr_auc_drop": 0.02239880670190809,
+      "std": 0.004171529678215913
+    },
+    {
+      "feature": "amount_vs_historical_max",
+      "mean_pr_auc_drop": 0.013907375640617258,
+      "std": 0.0022504458865454367
+    },
+    {
+      "feature": "device_customer_count",
+      "mean_pr_auc_drop": 0.008945331976970783,
+      "std": 0.008261434033794599
+    },
+    {
+      "feature": "is_new_ip_for_customer",
+      "mean_pr_auc_drop": 0.006839140720516801,
+      "std": 0.005049349015542342
+    },
+    {
+      "feature": "previous_transaction_count",
+      "mean_pr_auc_drop": 0.004532538018266158,
+      "std": 0.0024077582067093656
+    },
+    {
+      "feature": "historical_failure_rate",
+      "mean_pr_auc_drop": 0.004320383582973314,
+      "std": 0.0009122569191063729
+    },
+    {
+      "feature": "city_frequency",
+      "mean_pr_auc_drop": 0.004218804510981356,
+      "std": 0.004623546786514789
+    },
+    {
+      "feature": "previous_country_count",
+      "mean_pr_auc_drop": 0.003205855460889717,
+      "std": 0.0009615549048063481
+    },
+    {
+      "feature": "ip_customer_count",
+      "mean_pr_auc_drop": 0.003093374198504828,
+      "std": 0.004130207954182099
+    },
+    {
+      "feature": "is_new_device_for_customer",
+      "mean_pr_auc_drop": 0.0025338508514620105,
+      "std": 0.0011223975183993983
+    },
+    {
+      "feature": "transactions_last_7d",
+      "mean_pr_auc_drop": 0.0023539862703897186,
+      "std": 0.003143810653222032
+    },
+    {
+      "feature": "country_frequency",
+      "mean_pr_auc_drop": 0.0023442175323083237,
+      "std": 0.005613841893881069
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+# RazorShield AI - fraud risk engine training configuration.
+#
+# Every value that affects the trained model lives here so a run can be
+# reproduced from this file plus the dataset version.
+
+random_seed: 20260101
+feature_version: v1
+dataset_version: v1
+
+# Chronological split. TRAIN is strictly older than VALIDATION, which is
+# strictly older than TEST. No random shuffling anywhere.
+split:
+  train: 0.70
+  validation: 0.15
+  test: 0.15
+
+# Threshold selection objective. RazorShield routes elevated risk to a human
+# review queue: a false positive costs an analyst a few minutes, a false
+# negative costs a chargeback. beta=2 weights recall four times as heavily as
+# precision, which matches that asymmetry.
+threshold:
+  objective: fbeta
+  beta: 2.0
+  minimum_precision: 0.05
+
+# Calibration is applied only if the raw model is measurably miscalibrated.
+calibration:
+  expected_calibration_error_limit: 0.02
+  method: isotonic
+  bins: 10
+
+baseline:
+  name: logistic_regression
+  params:
+    max_iter: 2000
+    class_weight: balanced
+    solver: lbfgs
+    C: 1.0
+
+# Small, explicit grid searched on the VALIDATION set by PR-AUC. The test set is
+# never touched during selection.
+primary:
+  name: xgboost
+  fixed_params:
+    objective: binary:logistic
+    eval_metric: aucpr
+    tree_method: hist
+    n_jobs: 4
+  grid:
+    - {n_estimators: 300, max_depth: 4, learning_rate: 0.05, subsample: 0.8, colsample_bytree: 0.8, min_child_weight: 1, reg_lambda: 1.0, reg_alpha: 0.0}
+    - {n_estimators: 300, max_depth: 6, learning_rate: 0.05, subsample: 0.8, colsample_bytree: 0.8, min_child_weight: 3, reg_lambda: 2.0, reg_alpha: 0.0}
+    - {n_estimators: 500, max_depth: 4, learning_rate: 0.03, subsample: 0.9, colsample_bytree: 0.7, min_child_weight: 5, reg_lambda: 2.0, reg_alpha: 0.5}
+    - {n_estimators: 500, max_depth: 6, learning_rate: 0.03, subsample: 0.8, colsample_bytree: 0.8, min_child_weight: 1, reg_lambda: 5.0, reg_alpha: 0.0}
+    - {n_estimators: 200, max_depth: 3, learning_rate: 0.1, subsample: 1.0, colsample_bytree: 1.0, min_child_weight: 1, reg_lambda: 1.0, reg_alpha: 0.0}
+    - {n_estimators: 400, max_depth: 5, learning_rate: 0.05, subsample: 0.7, colsample_bytree: 0.7, min_child_weight: 3, reg_lambda: 3.0, reg_alpha: 0.5}
+    # Heavier regularisation: with only ~190 positives in the training fold,
+    # small leaves produce sharp, unstable decision boundaries. Larger
+    # min_child_weight forces each leaf to be backed by more evidence.
+    - {n_estimators: 600, max_depth: 3, learning_rate: 0.03, subsample: 0.8, colsample_bytree: 0.6, min_child_weight: 10, reg_lambda: 10.0, reg_alpha: 1.0}
+    - {n_estimators: 400, max_depth: 4, learning_rate: 0.05, subsample: 0.8, colsample_bytree: 0.6, min_child_weight: 20, reg_lambda: 5.0, reg_alpha: 1.0}
+    - {n_estimators: 800, max_depth: 3, learning_rate: 0.02, subsample: 0.9, colsample_bytree: 0.8, min_child_weight: 15, reg_lambda: 8.0, reg_alpha: 0.5}

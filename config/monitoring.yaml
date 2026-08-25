@@ -1,0 +1,68 @@
+# RazorShield AI - monitoring and drift configuration.
+#
+# Like the decision policy, these are configuration rather than constants buried
+# in Python: an operator tunes monitoring sensitivity without editing code, and
+# the values that produced an alert can be read back from one file.
+#
+# HOW THE DRIFT THRESHOLDS WERE SELECTED
+#
+# Drift is measured with Population Stability Index (PSI), the standard measure
+# in credit and fraud scoring, computed over ten quantile bins of the baseline
+# window:
+#
+#     PSI = sum over bins of (current% - baseline%) * ln(current% / baseline%)
+#
+# The banding below is the long-standing industry convention, not a number
+# invented here:
+#
+#   PSI < 0.10   no meaningful shift          -> NORMAL
+#   0.10 - 0.25  moderate shift, worth eyes   -> WATCH
+#   PSI >= 0.25  major shift, investigate     -> DRIFT_DETECTED
+#
+# It is used because it is interpretable and stable on small samples. A KS test
+# would be more sensitive, but on 20,000 rows it flags statistically significant
+# differences that are operationally meaningless - a monitor that cries wolf is
+# a monitor people switch off.
+#
+# For categorical features the same PSI formula runs over category shares
+# instead of quantile bins, so one banding covers both and an operator has one
+# scale to learn rather than two.
+#
+# DRIFT IS NOT FRAUD. A DRIFT_DETECTED status means the distribution moved.
+# It may mean a new merchant launched, a marketing campaign ran, or a model was
+# retrained upstream. Nothing in this system treats drift as evidence of fraud.
+
+drift:
+  # PSI bands. See the derivation above.
+  psi_watch: 0.10
+  psi_drift: 0.25
+
+  # Below this many rows in either window, PSI is dominated by sampling noise
+  # and the status is reported as INSUFFICIENT_DATA rather than guessed. 100 is
+  # ten expected observations per bin at ten bins - the point below which an
+  # empty bin stops being informative and starts being an artefact.
+  min_samples: 100
+
+  # Quantile bins for numeric features. Ten is the PSI convention; more bins on
+  # this dataset produce empty buckets in the sparse high-probability tail.
+  bins: 10
+
+  # Default comparison windows, in days, when the caller does not specify.
+  # Baseline is the older period, current the newer.
+  baseline_days: 60
+  current_days: 30
+
+metrics:
+  # Below this many labelled examples, precision/recall are reported as
+  # "insufficient labeled data" rather than as numbers. At n < 30 a single
+  # label flips a rate by more than three points, which is not a measurement.
+  min_labeled_samples: 30
+
+  # A rule whose human-override rate exceeds this is surfaced as a candidate for
+  # review. Not an action - the policy is never changed automatically.
+  high_override_rate: 0.30
+
+  # Below this many triggers a rule's override rate is not reported, for the
+  # same reason as min_labeled_samples: one override out of two is not a 50%
+  # override rate in any useful sense.
+  min_rule_triggers: 10

@@ -1,0 +1,28 @@
+# Shared lint/format configuration for both Python trees (backend/ and ml/).
+# Kept at the repository root so the same rules apply regardless of the
+# directory a command is run from.
+
+line-length = 100
+target-version = "py311"
+extend-exclude = ["database/migrations/versions", ".venv"]
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # import sorting
+    "B",   # bugbear
+    "UP",  # pyupgrade
+    "C4",  # comprehensions
+]
+ignore = ["B008"]  # FastAPI relies on function calls in argument defaults
+
+[lint.isort]
+# Both trees are first-party even though only one is on sys.path at a time.
+known-first-party = ["app", "ml"]
+
+[lint.per-file-ignores]
+"backend/tests/*" = ["E501"]
+# The reports are markdown templates; wrapping their table rows would break them.
+"ml/training/report.py" = ["E501"]
+"ml/anomaly/report.py" = ["E501"]

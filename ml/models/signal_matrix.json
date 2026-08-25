@@ -1,0 +1,273 @@
+{
+  "test_fold": {
+    "rows": 3000,
+    "fraud_rows": 60,
+    "supervised_model": "xgboost-v1",
+    "supervised_threshold": 0.5332090258598328,
+    "anomaly_model": "isolation-forest-v1",
+    "anomaly_threshold": 96.1038961038961,
+    "quadrants": {
+      "low_fraud_low_anomaly": {
+        "transactions": 2831,
+        "fraud_rows": 5,
+        "fraud_rate": 0.0017661603673613563
+      },
+      "low_fraud_high_anomaly": {
+        "transactions": 123,
+        "fraud_rows": 11,
+        "fraud_rate": 0.08943089430894309
+      },
+      "high_fraud_low_anomaly": {
+        "transactions": 12,
+        "fraud_rows": 10,
+        "fraud_rate": 0.8333333333333334
+      },
+      "high_fraud_high_anomaly": {
+        "transactions": 34,
+        "fraud_rows": 34,
+        "fraud_rate": 1.0
+      }
+    },
+    "complementarity": {
+      "fraud_caught_only_by_anomaly": 11,
+      "fraud_caught_only_by_supervised": 10,
+      "fraud_caught_by_both": 34,
+      "fraud_missed_by_both": 5
+    },
+    "rank_correlation": 0.43470259086495583
+  },
+  "validation_fold": {
+    "rows": 3000,
+    "fraud_rows": 49,
+    "supervised_model": "xgboost-v1",
+    "supervised_threshold": 0.5332090258598328,
+    "anomaly_model": "isolation-forest-v1",
+    "anomaly_threshold": 96.1038961038961,
+    "quadrants": {
+      "low_fraud_low_anomaly": {
+        "transactions": 2835,
+        "fraud_rows": 6,
+        "fraud_rate": 0.0021164021164021165
+      },
+      "low_fraud_high_anomaly": {
+        "transactions": 115,
+        "fraud_rows": 2,
+        "fraud_rate": 0.017391304347826087
+      },
+      "high_fraud_low_anomaly": {
+        "transactions": 17,
+        "fraud_rows": 12,
+        "fraud_rate": 0.7058823529411765
+      },
+      "high_fraud_high_anomaly": {
+        "transactions": 33,
+        "fraud_rows": 29,
+        "fraud_rate": 0.8787878787878788
+      }
+    },
+    "complementarity": {
+      "fraud_caught_only_by_anomaly": 2,
+      "fraud_caught_only_by_supervised": 12,
+      "fraud_caught_by_both": 29,
+      "fraud_missed_by_both": 6
+    },
+    "rank_correlation": 0.45101715199857156
+  },
+  "demo_scenarios": [
+    {
+      "transaction_id": "TXN_SCENARIO_A_CURRENT",
+      "is_fraud": 0,
+      "fraud_probability": 4.8622685426380485e-05,
+      "risk_score": 0,
+      "supervised_flags": false,
+      "anomaly_score": 58,
+      "severity": "LOW",
+      "anomaly_flags": false,
+      "customer_deviation_score": 48,
+      "customer_deviation_driver": "amount_vs_historical_average",
+      "top_deviations": [
+        {
+          "feature": "previous_transaction_count",
+          "value": 60.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "previous_success_count",
+          "value": 60.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "ip_age_hours",
+          "value": 2143.4666666666667,
+          "percentile": 100.0
+        },
+        {
+          "feature": "device_transaction_count",
+          "value": 60.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "device_age_hours",
+          "value": 2143.4666666666667,
+          "percentile": 100.0
+        }
+      ]
+    },
+    {
+      "transaction_id": "TXN_SCENARIO_B_CURRENT",
+      "is_fraud": 1,
+      "fraud_probability": 0.9996440410614014,
+      "risk_score": 100,
+      "supervised_flags": true,
+      "anomaly_score": 100,
+      "severity": "CRITICAL",
+      "anomaly_flags": true,
+      "customer_deviation_score": 100,
+      "customer_deviation_driver": "amount_vs_historical_average",
+      "top_deviations": [
+        {
+          "feature": "transactions_last_1h",
+          "value": 3.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "previous_transaction_count",
+          "value": 48.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "previous_success_count",
+          "value": 45.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "log_amount",
+          "value": 11.350418300109132,
+          "percentile": 100.0
+        },
+        {
+          "feature": "ip_transactions_last_1h",
+          "value": 3.0,
+          "percentile": 100.0
+        }
+      ]
+    },
+    {
+      "transaction_id": "TXN_SCENARIO_C_CURRENT_1",
+      "is_fraud": 1,
+      "fraud_probability": 0.2002914696931839,
+      "risk_score": 20,
+      "supervised_flags": false,
+      "anomaly_score": 100,
+      "severity": "CRITICAL",
+      "anomaly_flags": true,
+      "customer_deviation_score": 100,
+      "customer_deviation_driver": "transactions_last_1h",
+      "top_deviations": [
+        {
+          "feature": "transactions_last_1h",
+          "value": 4.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "ip_transactions_last_24h",
+          "value": 12.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "ip_transactions_last_1h",
+          "value": 12.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "ip_failed_last_1h",
+          "value": 3.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "device_transactions_last_24h",
+          "value": 12.0,
+          "percentile": 100.0
+        }
+      ]
+    },
+    {
+      "transaction_id": "TXN_SCENARIO_C_CURRENT_2",
+      "is_fraud": 1,
+      "fraud_probability": 0.9955503940582275,
+      "risk_score": 100,
+      "supervised_flags": true,
+      "anomaly_score": 100,
+      "severity": "CRITICAL",
+      "anomaly_flags": true,
+      "customer_deviation_score": 100,
+      "customer_deviation_driver": "transactions_last_1h",
+      "top_deviations": [
+        {
+          "feature": "transactions_last_1h",
+          "value": 4.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "ip_transactions_last_24h",
+          "value": 13.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "ip_transactions_last_1h",
+          "value": 13.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "ip_failed_last_1h",
+          "value": 3.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "device_transactions_last_24h",
+          "value": 13.0,
+          "percentile": 100.0
+        }
+      ]
+    },
+    {
+      "transaction_id": "TXN_SCENARIO_C_CURRENT_3",
+      "is_fraud": 1,
+      "fraud_probability": 0.9964827299118042,
+      "risk_score": 100,
+      "supervised_flags": true,
+      "anomaly_score": 100,
+      "severity": "CRITICAL",
+      "anomaly_flags": true,
+      "customer_deviation_score": 100,
+      "customer_deviation_driver": "transactions_last_1h",
+      "top_deviations": [
+        {
+          "feature": "transactions_last_1h",
+          "value": 4.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "ip_transactions_last_24h",
+          "value": 14.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "ip_transactions_last_1h",
+          "value": 14.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "ip_failed_last_1h",
+          "value": 3.0,
+          "percentile": 100.0
+        },
+        {
+          "feature": "device_transactions_last_24h",
+          "value": 14.0,
+          "percentile": 100.0
+        }
+      ]
+    }
+  ]
+}

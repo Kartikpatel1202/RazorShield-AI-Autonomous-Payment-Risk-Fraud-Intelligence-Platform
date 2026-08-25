@@ -1,0 +1,194 @@
+@import 'tailwindcss';
+
+/*
+ * RazorShield AI design tokens.
+ * Semantic names only - components never reference raw colour values.
+ *
+ * The palette is deliberately restrained. A risk console is read under time
+ * pressure, so colour carries meaning and nothing else: four decision states,
+ * four severity bands, one brand accent, and no decorative hues. Every place a
+ * colour appears, a text label appears with it - colour is never the only
+ * channel.
+ *
+ * Two surface families:
+ *   `surface-*`  the working canvas: near-white, low chroma, high legibility.
+ *   `ink-*`      the chrome: a deep navy used for the top bar and the rail, so
+ *                the application frame reads as a fixed instrument panel and
+ *                the data reads as the thing inside it.
+ */
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
+
+  /* --- working surfaces ------------------------------------------------- */
+  --color-surface: oklch(98.4% 0.003 265);
+  --color-surface-raised: oklch(100% 0 0);
+  --color-surface-sunken: oklch(96.2% 0.005 265);
+  --color-border-subtle: oklch(91.5% 0.006 265);
+  --color-border-strong: oklch(84% 0.009 265);
+  --color-content: oklch(20% 0.03 265);
+  --color-content-muted: oklch(48% 0.022 265);
+  --color-content-faint: oklch(63% 0.016 265);
+
+  /* --- application chrome ----------------------------------------------- */
+  --color-ink: oklch(24% 0.04 265);
+  --color-ink-raised: oklch(29% 0.042 265);
+  --color-ink-border: oklch(36% 0.035 265);
+  --color-ink-content: oklch(96% 0.005 265);
+  --color-ink-muted: oklch(72% 0.02 265);
+  --color-ink-faint: oklch(58% 0.022 265);
+
+  --color-brand: oklch(52% 0.19 262);
+  --color-brand-strong: oklch(45% 0.2 262);
+  --color-brand-soft: oklch(72% 0.13 262);
+  --color-brand-contrast: oklch(99% 0 0);
+
+  /* Decision semantics. APPROVE positive, STEP_UP warning, REVIEW attention,
+     BLOCK danger. Each has a text-safe tone and a low-alpha surface. */
+  --color-positive: oklch(50% 0.14 155);
+  --color-positive-surface: oklch(96% 0.033 155);
+  --color-warning: oklch(56% 0.14 70);
+  --color-warning-surface: oklch(96% 0.045 80);
+  --color-attention: oklch(50% 0.17 285);
+  --color-attention-surface: oklch(96% 0.033 285);
+  --color-danger: oklch(51% 0.2 25);
+  --color-danger-surface: oklch(96% 0.033 25);
+  --color-neutral: oklch(48% 0.022 265);
+  --color-neutral-surface: oklch(96% 0.005 265);
+
+  --radius-card: 0.75rem;
+
+  /* Elevation. Three steps, each a pair of shadows - a tight contact shadow
+     for the edge and a wide ambient one for the lift. A single large blur
+     reads as a smudge; the pair reads as a card sitting on a surface. */
+  --shadow-flat: 0 1px 2px oklch(20% 0.03 265 / 0.05);
+  --shadow-raised:
+    0 1px 2px oklch(20% 0.03 265 / 0.06), 0 4px 12px -2px oklch(20% 0.03 265 / 0.07);
+  --shadow-floating:
+    0 2px 4px oklch(20% 0.03 265 / 0.06), 0 12px 28px -6px oklch(20% 0.03 265 / 0.12);
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-surface text-content font-sans antialiased;
+    /* `cv11` gives Inter a single-storey l/1 pair, which stops a transaction
+       reference from being misread; `ss01` disambiguates I/l. Both matter more
+       here than they would on a marketing page. */
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  /* Tabular figures keep monetary and risk values from shifting column width. */
+  .numeric {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  :focus-visible {
+    @apply outline-brand outline-2 outline-offset-2;
+  }
+
+  /* Respect a reader who has asked for less motion. Nothing in this console
+     depends on animation to convey information, so it can all simply stop. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Wide tables scroll inside their own container so the page body never
+     scrolls horizontally, at any width.
+     `min-width: 0` is the load-bearing part: without it a `min-w-*` table
+     forces its ancestors wider than the viewport, and the overflow leaks all
+     the way up to <body> instead of being caught here. */
+  .table-scroll {
+    @apply w-full overflow-x-auto;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* A hairline grid behind the chrome. Two 1px gradients rather than an image:
+     no request, no raster, and it stays crisp at any zoom. */
+  .ink-grid {
+    background-image:
+      linear-gradient(oklch(100% 0 0 / 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(100% 0 0 / 0.035) 1px, transparent 1px);
+    background-size: 44px 44px;
+  }
+
+  /* A new row arriving on the live feed. Deliberately short and one-shot -
+     a list that keeps moving is a list nobody can read. */
+  .animate-row-in {
+    animation: row-in 320ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .animate-fade-in {
+    animation: fade-in 220ms ease-out;
+  }
+
+  /* The live indicator. A halo that expands and fades, so "connected" is
+     legible from across a room without being a flashing light. */
+  .animate-ping-slow {
+    animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
+  .animate-shimmer {
+    background-size: 200% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ping-slow {
+  75%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}

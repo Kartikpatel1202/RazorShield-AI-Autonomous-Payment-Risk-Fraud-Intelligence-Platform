@@ -1,0 +1,53 @@
+# RazorShield AI - behavioral anomaly engine (Phase 4) configuration.
+#
+# The chronological split is NOT defined here: it is read from
+# ml/training/config.yaml so the anomaly folds are byte-identical to the
+# supervised ones. Two engines evaluated on different folds could not be
+# compared, and Phase 5 has to compare them.
+
+random_seed: 20260101
+behavioral_feature_version: b1
+
+isolation_forest:
+  # 300 trees: the score stabilises well before this on ~14k rows, and the extra
+  # trees cost little at fit time while reducing run-to-run variance.
+  n_estimators: 300
+
+  # Isolation Forest is designed to subsample. 256 is the value from the
+  # original paper and remains the library default for good reason: small
+  # samples make anomalies easier to isolate, because a rare point is less
+  # likely to be masked by dense normal neighbours.
+  max_samples: 256
+
+  # The fitting population has known fraud removed, so by construction it is
+  # meant to be ~all normal. contamination only sets the internal offset_ used
+  # by predict()/decision_function(); this engine reports a percentile score
+  # instead, so it does not depend on the value. It is pinned low and explicit
+  # rather than left to 'auto' so the artifact is fully reproducible.
+  contamination: 0.01
+
+  # All 48 behavioral features are eligible at every split. Subsampling columns
+  # would make the score depend on which features a tree happened to see, which
+  # adds variance without helping on a feature set this size.
+  max_features: 1.0
+
+  bootstrap: false
+  n_jobs: 4
+
+# Severity bands are read off the validation score distribution rather than
+# assumed. The measured fraud rate inside each band is reported.
+severity_percentiles: [90.0, 97.0, 99.0]
+
+# Operating threshold for the binary evaluation, selected on validation only.
+# F2 matches the Phase 3 rationale: a missed fraud costs a chargeback, a false
+# positive costs an analyst a few minutes.
+threshold:
+  objective: fbeta
+  beta: 2.0
+  minimum_precision: 0.02
+
+# Permutation sensitivity: how much validation PR-AUC drops when a behavioral
+# feature is shuffled. Labels are used here for measurement only, never fitting.
+sensitivity:
+  repeats: 5
+  top_features: 15

@@ -1,0 +1,188 @@
+{
+  "gain": [
+    {
+      "feature": "log_amount",
+      "gain": 0.10345389693975449
+    },
+    {
+      "feature": "amount",
+      "gain": 0.09830406308174133
+    },
+    {
+      "feature": "amount_vs_historical_average",
+      "gain": 0.04035377874970436
+    },
+    {
+      "feature": "is_home_city",
+      "gain": 0.038515519350767136
+    },
+    {
+      "feature": "ip_country_matches_transaction",
+      "gain": 0.03677695617079735
+    },
+    {
+      "feature": "failed_transactions_last_1h",
+      "gain": 0.03395872190594673
+    },
+    {
+      "feature": "is_home_country",
+      "gain": 0.03189592808485031
+    },
+    {
+      "feature": "amount_zscore_vs_history",
+      "gain": 0.026875603944063187
+    },
+    {
+      "feature": "device_is_shared",
+      "gain": 0.02479027584195137
+    },
+    {
+      "feature": "transaction_country_IN",
+      "gain": 0.02008712850511074
+    },
+    {
+      "feature": "city_frequency",
+      "gain": 0.018744902685284615
+    },
+    {
+      "feature": "historical_amount_std",
+      "gain": 0.017892858013510704
+    },
+    {
+      "feature": "device_type_web_mobile",
+      "gain": 0.01678784191608429
+    },
+    {
+      "feature": "ip_failed_last_1h",
+      "gain": 0.016638129949569702
+    },
+    {
+      "feature": "is_new_device_for_customer",
+      "gain": 0.015263565815985203
+    },
+    {
+      "feature": "ip_is_proxy",
+      "gain": 0.015141138806939125
+    },
+    {
+      "feature": "transactions_last_24h",
+      "gain": 0.015073406510055065
+    },
+    {
+      "feature": "transaction_country_GB",
+      "gain": 0.014618691988289356
+    },
+    {
+      "feature": "country_frequency",
+      "gain": 0.014309846796095371
+    },
+    {
+      "feature": "ip_failure_rate_last_1h",
+      "gain": 0.013958685100078583
+    }
+  ],
+  "permutation": [
+    {
+      "feature": "amount_vs_historical_average",
+      "mean_pr_auc_drop": 0.19027396744062577,
+      "std": 0.024283324784934102
+    },
+    {
+      "feature": "amount",
+      "mean_pr_auc_drop": 0.18743820903709973,
+      "std": 0.04163615522670099
+    },
+    {
+      "feature": "amount_zscore_vs_history",
+      "mean_pr_auc_drop": 0.028480439485058316,
+      "std": 0.011008175115621752
+    },
+    {
+      "feature": "ip_transaction_count",
+      "mean_pr_auc_drop": 0.0253214796141779,
+      "std": 0.006231050115950379
+    },
+    {
+      "feature": "city_frequency",
+      "mean_pr_auc_drop": 0.008415383200861215,
+      "std": 0.002575416199740339
+    },
+    {
+      "feature": "log_amount",
+      "mean_pr_auc_drop": 0.008037329845233022,
+      "std": 0.005504548452627191
+    },
+    {
+      "feature": "ip_transactions_last_24h",
+      "mean_pr_auc_drop": 0.005212022106843972,
+      "std": 0.0007404792679109636
+    },
+    {
+      "feature": "previous_transaction_count",
+      "mean_pr_auc_drop": 0.004596086119060283,
+      "std": 0.000700845784168427
+    },
+    {
+      "feature": "previous_failure_count",
+      "mean_pr_auc_drop": 0.0034763942362905365,
+      "std": 0.0016722125574367484
+    },
+    {
+      "feature": "is_home_city",
+      "mean_pr_auc_drop": 0.0030541749669528604,
+      "std": 0.0016166951308915756
+    },
+    {
+      "feature": "amount_vs_historical_max",
+      "mean_pr_auc_drop": 0.00221575951523294,
+      "std": 0.0008502621696748229
+    },
+    {
+      "feature": "historical_average_amount",
+      "mean_pr_auc_drop": 0.002152988838513936,
+      "std": 0.001147616717632404
+    },
+    {
+      "feature": "seconds_since_previous_transaction",
+      "mean_pr_auc_drop": 0.0016955620400197046,
+      "std": 0.0026435602491851184
+    },
+    {
+      "feature": "device_transaction_count",
+      "mean_pr_auc_drop": 0.0013896693152027017,
+      "std": 0.004585166062421532
+    },
+    {
+      "feature": "amount_last_24h",
+      "mean_pr_auc_drop": 0.00131956536361999,
+      "std": 0.0004490772312473163
+    },
+    {
+      "feature": "device_is_shared",
+      "mean_pr_auc_drop": 0.0012477151782096074,
+      "std": 0.00030633783481685573
+    },
+    {
+      "feature": "payment_method",
+      "mean_pr_auc_drop": 0.0009696468968507288,
+      "std": 0.002715463210264685
+    },
+    {
+      "feature": "device_customer_count",
+      "mean_pr_auc_drop": 0.0007634909285907376,
+      "std": 0.00045067732455308777
+    },
+    {
+      "feature": "previous_city_count",
+      "mean_pr_auc_drop": 0.000704024316364249,
+      "std": 0.0005113804568407312
+    },
+    {
+      "feature": "transaction_country",
+      "mean_pr_auc_drop": 0.0005974762057506355,
+      "std": 0.00013071882924121431
+    }
+  ],
+  "permutation_repeats": 5,
+  "permutation_scoring": "average_precision"
+}

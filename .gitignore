@@ -1,0 +1,44 @@
+# --- Environment / secrets ---------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Python ------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Node / frontend ---------------------------------------------------------
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+coverage/
+
+# --- ML artefacts ------------------------------------------------------------
+# Datasets and serialised models are build outputs, rebuilt by
+# `python -m ml.training.build_dataset` and `python -m ml.training.train`.
+# metrics.json and feature_importance.json ARE tracked: they are the source the
+# generated evaluation report is rendered from.
+ml/data/raw/
+ml/data/processed/
+*.pkl
+*.joblib
+
+# --- Tooling / editors -------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+.claude/

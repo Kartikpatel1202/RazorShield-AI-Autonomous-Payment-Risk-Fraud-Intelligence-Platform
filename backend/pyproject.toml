@@ -1,0 +1,41 @@
+# Ruff configuration lives in the repository-root ruff.toml so the same rules
+# apply to backend/ and ml/ alike.
+
+[project]
+name = "razorshield-backend"
+version = "0.1.0"
+description = "RazorShield AI backend - autonomous payment risk and fraud management"
+requires-python = ">=3.11"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = false
+plugins = []
+exclude = ['^\.venv/']
+# The sibling `ml` package is imported by the risk API but is not an installed
+# distribution, so mypy needs the repository root on its search path.
+mypy_path = ".."
+
+[[tool.mypy.overrides]]
+module = ["alembic.*"]
+ignore_missing_imports = true
+
+# Scientific stack without type stubs. Their return values are Any, which is a
+# property of the libraries rather than of this code.
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "xgboost.*", "joblib.*", "yaml.*", "scipy.*"]
+ignore_missing_imports = true
+
+# The ML package is fully annotated, but it consumes those untyped libraries
+# constantly; requiring every sklearn call to be typed would mean blanket
+# `# type: ignore` comments that hide real problems.
+[[tool.mypy.overrides]]
+module = ["ml.*"]
+disallow_untyped_calls = false
+warn_return_any = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q --strict-markers"

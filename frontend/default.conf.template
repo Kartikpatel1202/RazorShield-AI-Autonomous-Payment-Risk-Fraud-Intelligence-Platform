@@ -1,0 +1,73 @@
+# nginx configuration for the RazorShield console.
+#
+# A template rather than a static file: the Content-Security-Policy has to name
+# the API origin the bundle will call, and that origin is a deployment choice.
+# The official nginx entrypoint runs `envsubst` over everything in
+# /etc/nginx/templates at container start, so `${API_ORIGIN}` below is filled in
+# from the environment without rebuilding the image.
+#
+# Port 8080, not 80: this image runs as an unprivileged user, which cannot bind
+# a port below 1024.
+
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # nginx advertises its exact version in every response and error page
+    # otherwise. Not a vulnerability - just a free hint about which advisories
+    # to read.
+    server_tokens off;
+
+    # --- Security headers ---------------------------------------------------
+    #
+    # `always` matters: without it these are omitted from error responses,
+    # which is precisely where a mistake gets rendered.
+    #
+    # The console loads its own bundle and talks to one API. It needs no
+    # frames, no plugins, no external scripts, and no form posts anywhere.
+    # `style-src` allows inline because the build inlines a small critical
+    # stylesheet; `script-src` does not, which is the half that matters.
+    #
+    # The two fonts.* origins are for the webfonts `index.html` links. Without
+    # them the policy silently blocks the stylesheet and the console renders in
+    # fallback typography - which is how a CSP that looks strict turns into a
+    # visual regression nobody attributes to security config.
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ${API_ORIGIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()" always;
+
+    # Hashed build assets are immutable.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        # `add_header` in a nested block replaces the inherited set rather than
+        # extending it, so the security headers are repeated here. This is an
+        # nginx inheritance rule that has caught out a great many deployments.
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ${API_ORIGIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
+    }
+
+    # A liveness target the orchestrator can poll without pulling the bundle.
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    # Single-page app: unknown paths are handled by the client router. The
+    # index must not be cached, or a deploy leaves browsers pointing at asset
+    # hashes that no longer exist.
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ${API_ORIGIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Referrer-Policy "no-referrer" always;
+    }
+}

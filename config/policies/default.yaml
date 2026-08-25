@@ -1,0 +1,104 @@
+# RazorShield AI - deterministic risk decision policy.
+#
+# This file is the ONLY place decision thresholds live. Rule *logic* is code
+# (predicates in policy/rules.py, reviewable and typed); rule *thresholds* and
+# *enablement* are here, so tuning the system never means editing Python.
+#
+# Every threshold below is taken from a measured operating point of the Phase 3
+# and Phase 4 models, not chosen as a round number. The measurements are on the
+# 3,000-transaction held-out test fold (60 fraud, 2.00% prevalence) and are
+# reproduced in docs/decision-policy.md.
+
+policy_version: "policy-v1"
+description: >
+  Baseline RazorShield policy. Blocks only on very high supervised risk with
+  independent corroboration; routes model disagreement to human review; never
+  approves when a required risk signal is missing.
+
+thresholds:
+  # --- supervised fraud probability (Phase 3, xgboost-v1) -------------------
+
+  # At p >= 0.90 the model flagged 37 of 3,000 test transactions and every one
+  # was fraud (precision 1.000, recall 0.617). That is the only band where the
+  # measured error rate justifies considering a block at all - and even here a
+  # block additionally requires independent corroboration (see rules).
+  fraud_block: 0.90
+
+  # Phase 3's own selected operating point, chosen on the validation fold by
+  # maximising F2. Test performance there: precision 0.957, recall 0.733.
+  # Above this the transaction is treated as high supervised risk.
+  fraud_high: 0.533209
+
+  # Below this, measured fraud rate on the test fold is at or under 1.1% in
+  # every anomaly band except CRITICAL, i.e. at or near the 2.00% base rate.
+  fraud_medium: 0.15
+
+  # --- behavioural anomaly (Phase 4, isolation-forest-v1) ------------------
+  # The three bands are Phase 4's measured severity boundaries, read off the
+  # validation score distribution at percentiles 90/97/99. Measured fraud rate
+  # inside each band on the test fold: MEDIUM 6.76%, HIGH 22.81%, CRITICAL
+  # 57.50%, against a 2.00% base rate.
+  anomaly_critical: 99.4
+  anomaly_high: 97.91
+  anomaly_medium: 92.41
+
+evidence:
+  # A block must never rest on one observation. Two independent tools must each
+  # have produced HIGH-or-worse evidence before a block is available.
+  min_independent_sources_for_block: 2
+
+  # Two independent high-severity findings before anomaly alone routes to human
+  # review. One high-severity finding is common in ordinary traffic.
+  min_high_findings_for_review: 2
+
+  # Investigations below this confidence are not treated as corroboration.
+  # Phase 5 clamps confidence to [0.05, 0.95] and computes it from measured
+  # breadth, corroboration, completeness and signal agreement.
+  min_investigation_confidence: 0.50
+
+fail_safe:
+  # What to do when a signal the policy needs is missing or unusable.
+  # Never "approve by default": a missing signal is an unknown, not a clean bill.
+  missing_supervised_signal: REVIEW
+  missing_anomaly_signal: REVIEW
+  missing_investigation: STEP_UP
+
+  # A block is the most consequential action and the hardest to reverse, so it
+  # is unavailable without a usable investigation. A would-be block downgrades
+  # to REVIEW instead.
+  require_investigation_for_block: true
+
+actions:
+  # Highest precedence first. When several rules match, the most restrictive
+  # action wins - but a rule must still match on its own explicit conditions,
+  # so precedence alone can never produce a block.
+  precedence:
+    - BLOCK
+    - REVIEW
+    - STEP_UP
+    - APPROVE
+
+  # The action taken when no rule matches at all.
+  default: APPROVE
+
+  # Actions that place the transaction in the human review queue. BLOCK is
+  # included deliberately: an incorrectly blocked customer needs a route to
+  # recourse, and a blocked payment is exactly the case a reviewer should see.
+  human_review_required_for:
+    - REVIEW
+    - BLOCK
+
+rules:
+  # Enablement only. The conditions themselves are typed predicates in
+  # policy/rules.py; they cannot be redefined from configuration, which keeps
+  # a malformed or hostile YAML file from inventing new behaviour.
+  CRITICAL_SUPERVISED_RISK: true
+  HIGH_ANOMALY_WITH_CORROBORATION: true
+  MODEL_DISAGREEMENT_HIGH_ANOMALY: true
+  HIGH_SUPERVISED_RISK: true
+  MODERATE_COMBINED_RISK: true
+  ELEVATED_ANOMALY_ONLY: true
+  MISSING_SUPERVISED_SIGNAL: true
+  MISSING_ANOMALY_SIGNAL: true
+  MISSING_INVESTIGATION: true
+  LOW_RISK: true

@@ -1,0 +1,36 @@
+# RazorShield AI - backend runtime dependencies (Phase 1 foundation)
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.5
+pydantic-settings==2.7.1
+SQLAlchemy==2.0.36
+alembic==1.14.1
+psycopg[binary]==3.2.3
+
+# --- ML risk engine (Phase 3) ---------------------------------------------
+# The `ml/` package shares this environment: the backend loads the trained
+# model at inference time, so these are runtime dependencies, not dev-only.
+numpy==2.2.1
+pandas==2.2.3
+scikit-learn==1.6.1
+xgboost==2.1.4
+joblib==1.4.2
+
+# --- AI investigation agent (Phase 5) ----------------------------------------
+# The agent talks to language models through its own provider abstraction; only
+# `agent/llm/` imports a vendor SDK. httpx backs the OpenAI-compatible provider
+# and is also pulled in by the Anthropic SDK.
+anthropic>=1.0,<2
+httpx==0.28.1
+
+# --- Security, observability (Phase 10) --------------------------------------
+# PyJWT verifies with a fixed algorithm list, which is what closes off `alg:
+# none` and HS/RS confusion; bcrypt is the password KDF. Neither is wrapped in
+# passlib, whose bcrypt backend has a long-standing version incompatibility and
+# adds an abstraction this project does not need.
+PyJWT==2.10.1
+bcrypt==4.2.1
+
+# Prometheus exposition. Used with a private CollectorRegistry so the default
+# collectors - which publish the exact Python build - are never registered.
+prometheus-client==0.21.1

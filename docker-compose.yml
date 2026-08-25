@@ -1,0 +1,157 @@
+# RazorShield AI - full stack.
+# Start with:  docker compose up --build
+# Values come from .env (copy .env.example first).
+#
+# Hardening applied to every service:
+#   * `no-new-privileges` - a process inside cannot gain capabilities through
+#     a setuid binary, which closes the usual first step after a code-execution
+#     bug.
+#   * `cap_drop: [ALL]` - none of these services needs a Linux capability.
+#     Postgres and nginx get back only what they actually use.
+#   * resource limits - a runaway query or a memory leak degrades one container
+#     instead of the host.
+#   * `stop_grace_period` - long enough for the backend's lifespan shutdown to
+#     stop the simulator and dispose the connection pool before SIGKILL.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: razorshield-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-razorshield}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-razorshield}
+    ports:
+      # Bound to the loopback interface, not 0.0.0.0: the database is reachable
+      # from this machine for the CLI scripts and from nothing else on the
+      # network. Removing this line entirely is the right call for a real
+      # deployment, where only `backend` needs to reach it.
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-razorshield} -d ${POSTGRES_DB:-razorshield}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # Postgres drops from root to the `postgres` user at start-up.
+      - CHOWN
+      - DAC_READ_SEARCH
+      - FOWNER
+      - SETGID
+      - SETUID
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1g
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: razorshield-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-razorshield}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-razorshield}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      ACCESS_TOKEN_TTL_MINUTES: ${ACCESS_TOKEN_TTL_MINUTES:-60}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-claude-sonnet-5}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}
+    ports:
+      - '8000:8000'
+    healthcheck:
+      # Liveness, not readiness: this decides whether to restart the container,
+      # and restarting a healthy process because PostgreSQL blipped is how a
+      # dependency outage becomes a total one.
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health/live').status == 200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Uvicorn needs 30s of grace to finish in-flight requests, stop the
+    # simulator workers and dispose the pool. The default 10s would SIGKILL a
+    # shutdown mid-way and litter the log of an otherwise clean deploy.
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          # The two model artifacts and their feature frames dominate this.
+          memory: 2g
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    container_name: razorshield-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      # Named in the console's Content-Security-Policy `connect-src`, so the
+      # browser refuses any request the bundle makes to anywhere else.
+      API_ORIGIN: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - '3000:8080'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # A static file server has no business writing to its own filesystem. The
+    # tmpfs mounts cover the only paths nginx actually needs to write: its pid
+    # file, the proxy/scratch buffers, and `/etc/nginx/conf.d`, where the
+    # image's own entrypoint renders `default.conf.template` through envsubst at
+    # start-up. Without that last one the container crash-loops on
+    # "can't create /etc/nginx/conf.d/default.conf: Read-only file system".
+    read_only: true
+    # Long form rather than the `tmpfs:` shorthand, because the shorthand mounts
+    # root-owned and mode 0755 - and nginx here runs as uid 101, which then
+    # cannot write any of them. 1023 decimal is 0o1777 - /tmp semantics:
+    # writable by anyone, sticky so one user cannot remove another's files.
+    # Compose takes this field as a decimal integer, so it cannot be written
+    # in the octal form everyone recognises.
+    volumes:
+      - type: tmpfs
+        target: /tmp
+        tmpfs: { mode: 1023 }
+      - type: tmpfs
+        target: /var/cache/nginx
+        tmpfs: { mode: 1023 }
+      - type: tmpfs
+        target: /var/run
+        tmpfs: { mode: 1023 }
+      - type: tmpfs
+        target: /etc/nginx/conf.d
+        tmpfs: { mode: 1023 }
+    stop_grace_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 256m
+
+volumes:
+  postgres-data:
