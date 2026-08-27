@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 const SIMULATION_NOTICE =
-  'Real-Time Risk Intelligence - not real Razorpay infrastructure or transaction data.'
+  'Real-Time Risk Intelligence · Demonstration Environment · No production transaction data'
 
 /** The wordmark, matching the application chrome. */
 export function Mark({ className }: { className?: string }) {

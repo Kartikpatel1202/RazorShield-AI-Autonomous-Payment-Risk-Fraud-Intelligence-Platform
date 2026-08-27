@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { Sidebar } from './sidebar'
 
 const SIMULATION_NOTICE =
-  'Real-Time Risk Intelligence - not real Razorpay infrastructure or transaction data.'
+  'Real-Time Risk Intelligence · Demonstration Environment · No production transaction data'
 
 /** The wordmark. An inline SVG so it scales and needs no request. */
 function Mark({ className }: { className?: string }) {
@@ -60,7 +60,7 @@ function HealthPill() {
     : !data
       ? 'Checking...'
       : failing.length === 0
-        ? 'All systems operational'
+        ? 'Risk Engine Operational'
         : `${failing.length} subsystem${failing.length === 1 ? '' : 's'} degraded`
 
   return (

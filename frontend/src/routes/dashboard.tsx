@@ -95,7 +95,7 @@ export function DashboardPage() {
       <PageHeader
         eyebrow="Operations"
         title="Risk Command Center"
-        description="What the platform is doing with payment risk right now. Every figure is a database aggregate - none is hardcoded, and none is estimated in the browser."
+        description="Real-time visibility into payment risk, fraud signals, investigations, and policy decisions. All metrics are derived from database aggregates."
         meta={
           summary ? (
             <MetaList

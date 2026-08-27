@@ -170,7 +170,7 @@ describe('dashboard', () => {
   it('renders system health from the health endpoint', async () => {
     renderWithRouter(<App />, '/dashboard')
 
-    expect(await screen.findByText('All systems operational')).toBeInTheDocument()
+    expect(await screen.findByText('Risk Engine Operational')).toBeInTheDocument()
     expect(screen.getByText('xgboost-v1')).toBeInTheDocument()
     expect(screen.getByText('isolation-forest-v1')).toBeInTheDocument()
   })
