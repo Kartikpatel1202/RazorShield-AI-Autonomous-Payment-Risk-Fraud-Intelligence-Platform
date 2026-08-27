@@ -327,66 +327,9 @@ Those are produced by the backend risk pipeline.
 # Core Risk Pipeline
 
 The complete processing architecture can be represented as:
-
-```text
-                    ┌──────────────────────┐
-                    │ Transaction Source   │
-                    │ / Simulator          │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │ Transaction Intake   │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │ Fraud Risk Model     │
-                    │                      │
-                    │ Fraud Probability    │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │ Behavioural Anomaly  │
-                    │ Engine               │
-                    │                      │
-                    │ Anomaly Score        │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │ Investigation Layer  │
-                    │                      │
-                    │ Evidence + Findings  │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │ Policy Engine        │
-                    │                      │
-                    │ Rules + Thresholds   │
-                    └──────────┬───────────┘
-                               │
-                 ┌─────────────┼──────────────┐
-                 │             │              │
-                 ▼             ▼              ▼
-             APPROVE        STEP-UP         REVIEW
-                                                │
-                                                ▼
-                                             BLOCK
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │ Decision Persistence │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │ Audit Trail          │
-                    └──────────────────────┘
-```
-
+<p align="center">
+  <img src="docs/riskpipeline.png" alt="Risk Pipeline" width="100%">
+</p>
 ---
 
 # 🏗️ System Architecture
@@ -570,31 +513,9 @@ The final decision is produced by policy evaluation.
 
 Conceptually:
 
-```text
-                    Transaction
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │ Risk Signals        │
-              ├─────────────────────┤
-              │ Fraud Probability   │
-              │ Anomaly Score        │
-              │ Severity             │
-              │ Behaviour            │
-              │ Investigation       │
-              └──────────┬──────────┘
-                         │
-                         ▼
-                  Policy Evaluation
-                         │
-            ┌────────────┼────────────┐
-            ▼            ▼            ▼
-         APPROVE       STEP-UP       REVIEW
-                                      │
-                                      ▼
-                                    BLOCK
-```
-
+<p align="center">
+  <img src="docs/decisionengine.png" alt="Decision Engine" width="100%">
+</p>
 This separation is intentional:
 
 ```text
@@ -649,46 +570,9 @@ It is not connected to live production payment traffic.
 A suspicious transaction can move through an investigation workflow.
 
 Example:
-
-```text
-┌──────────────┐
-│ Transaction  │
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ Fraud Model  │
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ Anomaly      │
-│ Detection    │
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ Investigation│
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ Evidence     │
-│ & Findings   │
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ Policy       │
-│ Decision     │
-└──────┬───────┘
-       │
-       ▼
-┌─────────────────────────┐
-│ APPROVE / STEP-UP /     │
-│ REVIEW / BLOCK          │
-└─────────────────────────┘
-```
+<p align="center">
+  <img src="docs/investigation.png" alt="Investigation Flow" width="100%">
+</p>
 
 An investigation can expose:
 
@@ -840,27 +724,9 @@ The database stores the operational state required by the risk platform.
 
 Conceptually:
 
-```text
-                    PostgreSQL
-                        │
-        ┌───────────────┼────────────────┐
-        │               │                │
-        ▼               ▼                ▼
-   Transactions     Users/Roles     Investigations
-        │               │                │
-        │               │                ├── Findings
-        │               │                ├── Evidence
-        │               │                └── Decisions
-        │
-        ├── Risk Signals
-        ├── Fraud Probability
-        ├── Anomaly Score
-        ├── Severity
-        └── Decision
-                        │
-                        ▼
-                   Audit Events
-```
+<p align="center">
+  <img src="docs/databasearchitecture.png" alt="Database Architecture" width="100%">
+</p>
 
 Database migrations are managed through Alembic.
 
@@ -872,22 +738,9 @@ The frontend communicates with the backend through API endpoints.
 
 Conceptual API structure:
 
-```text
-Frontend
-   │
-   ▼
-FastAPI
-   │
-   ├── Authentication
-   ├── Users
-   ├── Transactions
-   ├── Risk Evaluation
-   ├── Investigations
-   ├── Reviews
-   ├── Policies
-   ├── Audit Logs
-   └── Simulator
-```
+<p align="center">
+  <img src="docs/APIarchitecture.png" alt="API Architecture" width="100%">
+</p>
 
 The backend remains responsible for:
 
@@ -1005,24 +858,19 @@ The main dashboard provides a command-center view of the current risk environmen
 
 Example metrics include:
 
-```text
-Transactions
-Approval Rate
-High Risk
-Open Reviews
-Step-Up
-Review
-Blocked
-Critical Anomalies
-```
+<p align="center">
+  <img src="docs/Dashboard1.png" alt="Dashboard1" width="100%">
+</p>
+<p align="center">
+  <img src="docs/Dashboard2.png" alt="Dashboard2" width="100%">
+</p>
+<p align="center">
+  <img src="docs/Dashboard3.png" alt="Dashboard3" width="100%">
+</p>
 
 The dashboard also provides risk trends over time.
 
 ---
-
-# Screenshots
-
-Add your final screenshots to the repository and reference them here.
 
 ## Risk Command Center
 
@@ -1539,44 +1387,9 @@ Potential production improvements include:
 
 A future production architecture could look like:
 
-```text
-                  Payment Sources
-                        │
-                        ▼
-               ┌─────────────────┐
-               │ API Gateway     │
-               └────────┬────────┘
-                        │
-                        ▼
-               ┌─────────────────┐
-               │ Event Streaming │
-               │ Kafka / Queue   │
-               └────────┬────────┘
-                        │
-              ┌─────────┴─────────┐
-              │                   │
-              ▼                   ▼
-       Fraud Risk Service   Behaviour Engine
-              │                   │
-              └─────────┬─────────┘
-                        │
-                        ▼
-                Policy Engine
-                        │
-            ┌───────────┼───────────┐
-            ▼           ▼           ▼
-         APPROVE      STEP-UP      REVIEW
-                                    │
-                                    ▼
-                               Investigation
-                                    │
-                                    ▼
-                                  BLOCK
-                                    │
-                                    ▼
-                             Audit Platform
-```
-
+<p align="center">
+  <img src="docs/Productionsection.png" alt="Production scale Architecture" width="100%">
+</p>
 ---
 
 # Project Phases
@@ -1922,14 +1735,9 @@ Controlled scenarios
 
 Determines:
 
-```text
-Fraud probability
-Anomaly score
-Severity
-Investigation
-Policy match
-Decision
-```
+<p align="center">
+  <img src="docs/riskpipeline.png" alt="Risk Pipeline" width="100%">
+</p>
 
 Therefore:
 
@@ -2139,51 +1947,6 @@ Vellore Institute of Technology
 ---
 
 ## Final Architecture at a Glance
-
-```text
-                         RAZORSHIELD AI
-                    REAL-TIME RISK INTELLIGENCE
-                              │
-                              ▼
-                    ┌──────────────────┐
-                    │ Transaction      │
-                    │ Intake           │
-                    └────────┬─────────┘
-                             │
-              ┌──────────────┴──────────────┐
-              ▼                             ▼
-     ┌─────────────────┐          ┌─────────────────┐
-     │ Fraud Risk      │          │ Behavioural     │
-     │ Model           │          │ Anomaly Engine  │
-     └────────┬────────┘          └────────┬────────┘
-              │                            │
-              └──────────────┬─────────────┘
-                             ▼
-                    ┌──────────────────┐
-                    │ Investigation    │
-                    │ & Evidence       │
-                    └────────┬─────────┘
-                             │
-                             ▼
-                    ┌──────────────────┐
-                    │ Policy Engine    │
-                    └────────┬─────────┘
-                             │
-             ┌───────────────┼───────────────┐
-             ▼               ▼               ▼
-         APPROVE          STEP-UP          REVIEW
-                                             │
-                                             ▼
-                                           BLOCK
-                                             │
-                                             ▼
-                                  ┌──────────────────┐
-                                  │ PostgreSQL       │
-                                  │ Persistence      │
-                                  └────────┬─────────┘
-                                           │
-                                           ▼
-                                  ┌──────────────────┐
-                                  │ Audit Trail      │
-                                  └──────────────────┘
-```
+<p align="center">
+  <img src="docs/finalflow.png" alt="Final Flow Architecture" width="100%">
+</p>
