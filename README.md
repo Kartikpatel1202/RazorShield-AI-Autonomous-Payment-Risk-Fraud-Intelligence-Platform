@@ -436,68 +436,13 @@ The complete processing architecture can be represented as:
 
 ---
 
-# System Architecture
+# 🏗️ System Architecture
 
-```mermaid
-flowchart TB
+RazorShield AI follows a layered architecture that combines real-time transaction processing, dual-model risk intelligence, deterministic policy decisions, human-in-the-loop investigations, and immutable auditability.
 
-    USER[Operations User]
-
-    subgraph FRONTEND[Frontend]
-        UI[Risk Operations Console]
-        DASH[Dashboard]
-        LIVE[Live Risk Stream]
-        TX[Transaction Explorer]
-        INV[Investigations]
-        REV[Reviews]
-        POL[Policy]
-        AUD[Audit Log]
-    end
-
-    subgraph BACKEND[Backend]
-        API[FastAPI Service]
-        AUTH[Authentication & RBAC]
-        PIPE[Risk Processing Pipeline]
-        MODEL[Fraud Risk Model]
-        ANOM[Behavioural Anomaly Engine]
-        POLICY[Policy / Decision Engine]
-        CASE[Investigation & Review]
-        AUDIT[Audit Service]
-        SIM[Traffic Simulator]
-    end
-
-    subgraph DATA[Persistence]
-        DB[(PostgreSQL)]
-    end
-
-    USER --> UI
-
-    UI --> DASH
-    UI --> LIVE
-    UI --> TX
-    UI --> INV
-    UI --> REV
-    UI --> POL
-    UI --> AUD
-
-    UI --> API
-
-    API --> AUTH
-    API --> PIPE
-    API --> CASE
-    API --> AUDIT
-    API --> SIM
-
-    PIPE --> MODEL
-    PIPE --> ANOM
-    PIPE --> POLICY
-
-    API --> DB
-    PIPE --> DB
-    CASE --> DB
-    AUDIT --> DB
-```
-
+<p align="center">
+  <img src="docs/architecture.png" alt="RazorShield AI System Architecture" width="100%">
+</p>
 ---
 
 # Transaction Processing Workflow
