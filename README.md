@@ -886,8 +886,6 @@ RazorShield-AI/
 └── .env.example
 ```
 
----
-
 # Getting Started
 
 ## Prerequisites
