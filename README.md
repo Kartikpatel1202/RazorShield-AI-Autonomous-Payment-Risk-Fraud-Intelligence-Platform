@@ -443,7 +443,6 @@ RazorShield AI follows a layered architecture that combines real-time transactio
 <p align="center">
   <img src="docs/architecture.png" alt="RazorShield AI System Architecture" width="100%">
 </p>
----
 
 # Transaction Processing Workflow
 
