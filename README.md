@@ -806,59 +806,39 @@ The existing risk pipeline evaluates the generated events.
 
 The main dashboard provides a command-center view of the current risk environment.
 
-Example metrics include:
-
 <p align="center">
   <img src="docs/Dashboard1.png" alt="Dashboard1" width="100%">
 </p>
+
+<p align="center">
+  <img src="docs/keymetrics.png" alt="Key metrics" width="100%">
+</p>
+The dashboard also provides risk trends over time.
+
+## Risk Command Center
+
 <p align="center">
   <img src="docs/Dashboard2.png" alt="Dashboard2" width="100%">
 </p>
+
+## Live Risk Stream
+
 <p align="center">
   <img src="docs/Dashboard3.png" alt="Dashboard3" width="100%">
 </p>
 
-The dashboard also provides risk trends over time.
-
----
-
-## Risk Command Center
-
-```text
-![RazorShield AI Dashboard](docs/images/dashboard.png)
-```
-
-## Live Risk Stream
-
-```text
-![Live Risk Stream](docs/images/live-risk-stream.png)
-```
-
 ## Transaction Explorer
 
-```text
-![Transaction Explorer](docs/images/transactions.png)
-```
+<p align="center">
+  <img src="docs/transactionexplorer.png" alt="Transaction explorer" width="100%">
+</p>
 
 ## Investigation View
 
-```text
-![Investigation Workflow](docs/images/investigation.png)
-```
+<p align="center">
+  <img src="docs/investigationview.png" alt="Investigation View" width="100%">
+</p>
 
-## Authentication
-
-```text
-![Sign In](docs/images/sign-in.png)
-```
-
-> Recommended GitHub structure:
->
-> `docs/images/`
->
-> Store all screenshots and architecture diagrams inside this directory.
-
----
 
 # Project Structure
 
