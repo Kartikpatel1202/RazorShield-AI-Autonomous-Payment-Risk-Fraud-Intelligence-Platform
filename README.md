@@ -128,37 +128,9 @@ The system also needs:
 RazorShield AI addresses these challenges through a multi-stage risk operations pipeline.
 
 Instead of relying on a single fraud score, the platform combines:
-
-```text
-Transaction Data
-      │
-      ▼
-Fraud Risk Model
-      │
-      ├──────────────┐
-      ▼              ▼
-Fraud Probability   Behavioural Anomaly Engine
-      │              │
-      └──────┬───────┘
-             ▼
-        Policy Engine
-             │
-             ▼
-      Risk Classification
-             │
-     ┌───────┼────────┐
-     ▼       ▼        ▼
-  APPROVE  STEP-UP   REVIEW
-                      │
-                      ▼
-                   BLOCK
-             │
-             ▼
-       Investigation
-             │
-             ▼
-       Audit Logging
-```
+<p align="center">
+  <img src="docs/solution.png" alt="Solution" width="100%">
+</p>
 
 This creates an end-to-end risk management system rather than a standalone fraud classifier.
 
