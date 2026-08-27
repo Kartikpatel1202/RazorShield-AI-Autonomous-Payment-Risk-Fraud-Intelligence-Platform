@@ -8,7 +8,7 @@ a rule, not as a suggestion the engine weighs. The agent's `recommended_action`
 is not an input, and there is no field in the decision context through which it
 could become one.
 
-> RazorShield AI is a hackathon simulation. The dataset is synthetic and no real
+> RazorShield AI is a Real-Time Risk Intelligence. The dataset is synthetic and no real
 > Razorpay infrastructure or transaction data is involved.
 
 ## 1. Architecture

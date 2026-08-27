@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { Sidebar } from './sidebar'
 
 const SIMULATION_NOTICE =
-  'Hackathon simulation - not real Razorpay infrastructure or transaction data.'
+  'Real-Time Risk Intelligence - not real Razorpay infrastructure or transaction data.'
 
 /** The wordmark. An inline SVG so it scales and needs no request. */
 function Mark({ className }: { className?: string }) {

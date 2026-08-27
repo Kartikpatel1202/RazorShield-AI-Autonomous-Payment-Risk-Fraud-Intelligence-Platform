@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 DESCRIPTION = (
     "Autonomous payment risk and fraud management platform. "
-    "Hackathon simulation - not real Razorpay production infrastructure."
+    "Real-Time Risk Intelligence - not real Razorpay production infrastructure."
 )
 
 

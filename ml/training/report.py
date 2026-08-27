@@ -148,7 +148,7 @@ def render(metrics: dict[str, Any]) -> str:
 {_stamp(metrics["generated_at"])}. Every figure below comes from a real training
 run; none is typed by hand.*
 
-> RazorShield AI is a hackathon simulation. The dataset is synthetic, so these
+> RazorShield AI is a Real-Time Risk Intelligence. The dataset is synthetic, so these
 > numbers measure the pipeline on generated data with deliberately learnable
 > fraud structure - they are not a claim about real-world fraud detection
 > performance.

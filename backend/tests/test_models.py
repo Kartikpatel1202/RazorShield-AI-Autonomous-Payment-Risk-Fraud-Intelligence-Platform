@@ -32,6 +32,7 @@ from app.models.enums import PaymentMethod, TransactionStatus
 EXPECTED_TABLES = {
     "users",
     "merchants",
+    "password_reset_tokens",
     "customers",
     "devices",
     "customer_devices",

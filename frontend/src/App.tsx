@@ -9,11 +9,14 @@ import { DashboardPage } from '@/routes/dashboard'
 import { FeedbackPage } from '@/routes/feedback'
 import { InvestigationsPage } from '@/routes/investigations'
 import { LivePage } from '@/routes/live'
+import { ForgotPasswordPage } from '@/routes/forgot-password'
 import { LoginPage } from '@/routes/login'
 import { MonitoringPage } from '@/routes/monitoring'
 import { NotFoundPage } from '@/routes/not-found'
+import { ResetPasswordPage } from '@/routes/reset-password'
 import { ReviewsPage } from '@/routes/reviews'
 import { RulesPage } from '@/routes/rules'
+import { SignupPage } from '@/routes/signup'
 import { TransactionDetailPage } from '@/routes/transaction-detail'
 import { TransactionsPage } from '@/routes/transactions'
 
@@ -65,7 +68,12 @@ function Console() {
     <AppShell>
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        {/* A signed-in user who follows a bookmarked auth link belongs in the
+            console, not on a form asking them to do what they have done. */}
         <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/signup" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/forgot-password" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/reset-password" element={<Navigate to="/dashboard" replace />} />
         <Route
           path="/dashboard"
           element={
@@ -155,19 +163,28 @@ function Console() {
   )
 }
 
+/**
+ * The pages reachable without a session.
+ *
+ * A closed set, and the only thing rendered while signed out - so there is no
+ * URL a probe can hit that draws console chrome before its data requests fail.
+ * Anything unrecognised falls through to the sign-in form rather than to a
+ * 404, because for someone who is not signed in that is what the answer is.
+ */
+function PublicRoutes() {
+  return (
+    <Routes>
+      <Route path="/signup" element={<SignupPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="*" element={<LoginPage />} />
+    </Routes>
+  )
+}
+
 function Routed() {
   const { signedIn } = useAuth()
-  // One branch, not a per-route redirect: while signed out there is exactly one
-  // reachable page, so there is no URL a probe can hit that renders console
-  // chrome before its data requests fail.
-  if (!signedIn) {
-    return (
-      <Routes>
-        <Route path="*" element={<LoginPage />} />
-      </Routes>
-    )
-  }
-  return <Console />
+  return signedIn ? <Console /> : <PublicRoutes />
 }
 
 export function App() {

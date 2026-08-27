@@ -80,3 +80,106 @@ class LogoutResponse(BaseModel):
 
     status: Literal["ok"] = "ok"
     detail: str
+
+
+# --------------------------------------------------------------------------
+# Self-service registration
+# --------------------------------------------------------------------------
+
+#: Shared by every address field. Same shape as `LoginRequest.email` - see the
+#: note there for why this is a bounded pattern rather than `EmailStr`.
+EMAIL_PATTERN = r"^[^\s@]{1,64}@[^\s@]{1,190}$"
+
+
+class SignupRequest(BaseModel):
+    """A public registration.
+
+    Note what is *absent*: there is no ``role`` field, and ``extra="forbid"``
+    means adding one is a 422 rather than a silently ignored key. The service
+    that consumes this does not take a role parameter either, so there are two
+    independent reasons a self-service signup cannot produce an administrator.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str = Field(min_length=1, max_length=120)
+    email: str = Field(min_length=3, max_length=255, pattern=EMAIL_PATTERN)
+    #: Bounded at the bcrypt limit here; the strength policy is applied in the
+    #: endpoint so its message can name the specific rule that failed.
+    password: str = Field(min_length=1, max_length=MAX_PASSWORD_BYTES)
+
+
+class SignupResponse(BaseModel):
+    """Confirmation of a created account.
+
+    Carries no token. Registration and authentication are separate steps on
+    purpose: a signup that silently signs you in makes "create an account for
+    someone else's address" a way to obtain a live session, and it hides from
+    the user that a password is a thing they now have to remember.
+    """
+
+    status: Literal["created"] = "created"
+    detail: str
+    user: UserProfile
+
+
+# --------------------------------------------------------------------------
+# Password reset
+# --------------------------------------------------------------------------
+
+
+class ForgotPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(min_length=3, max_length=255, pattern=EMAIL_PATTERN)
+
+
+class ForgotPasswordResponse(BaseModel):
+    """Always the same, whether or not the address is registered.
+
+    ``detail`` is a fixed string. Not "we sent you an email" - which would be a
+    claim the server cannot make about an address it has never seen - but the
+    conditional phrasing that is true either way.
+    """
+
+    status: Literal["ok"] = "ok"
+    detail: str
+
+    #: **Local development only.** Populated when `AUTH_EXPOSE_DEV_RESET_TOKEN`
+    #: is on, which the configuration refuses to allow in production. There is
+    #: no SMTP integration in this project, so without this the reset flow could
+    #: not be exercised at all; it is the documented substitute for an inbox,
+    #: not a feature.
+    #:
+    #: It is also, unavoidably, an account-existence oracle: a registered
+    #: address gets a link and an unregistered one does not. That is precisely
+    #: why it cannot be switched on in the deployment that matters.
+    dev_reset_url: str | None = None
+    dev_expires_at: datetime | None = None
+
+
+class ResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    #: The raw token from the link. Bounded so an enormous body cannot reach the
+    #: hash function, and pattern-constrained to the URL-safe base64 alphabet
+    #: `secrets.token_urlsafe` produces.
+    token: str = Field(min_length=16, max_length=256, pattern=r"^[A-Za-z0-9_-]+$")
+    password: str = Field(min_length=1, max_length=MAX_PASSWORD_BYTES)
+
+
+class ResetPasswordResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+    detail: str
+
+
+class PasswordPolicyResponse(BaseModel):
+    """What the console shows beside the password field.
+
+    Served rather than duplicated in the frontend so the rule the form advertises
+    and the rule the server enforces cannot drift apart.
+    """
+
+    min_length: int
+    max_bytes: int
+    guidance: list[str]

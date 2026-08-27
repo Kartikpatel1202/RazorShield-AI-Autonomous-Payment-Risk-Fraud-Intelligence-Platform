@@ -15,7 +15,9 @@ Nothing in this module logs, and nothing returns a secret.
 
 from __future__ import annotations
 
+import hashlib
 import hmac
+import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -190,3 +192,100 @@ def bearer_token(header_value: str | None) -> str:
     if not hmac.compare_digest(scheme.lower(), "bearer") or not credential.strip():
         raise TokenError("unsupported authorization scheme")
     return credential.strip()
+
+
+# ---------------------------------------------------------------------------
+# Password policy
+# ---------------------------------------------------------------------------
+
+#: Long enough that a bcrypt-cost-12 offline attack is not worth starting.
+#: Length is the only rule here that reliably buys entropy; composition rules
+#: ("one uppercase, one digit, one symbol") mostly buy `Password1!`.
+MIN_PASSWORD_LENGTH = 12
+
+#: Refused outright. Not a dictionary - just the handful that show up in every
+#: credential-stuffing list and that a length rule alone would admit.
+#: Every entry is at least `MIN_PASSWORD_LENGTH` characters. A shorter one
+#: would be unreachable - the length rule runs first and would reject it before
+#: this set was consulted - so it would sit here looking like protection while
+#: doing nothing.
+_OBVIOUS_PASSWORDS = frozenset(
+    {
+        "password1234",
+        "passw0rd1234",
+        "administrator",
+        "qwertyuiop12",
+        "123456789012",
+        "letmein12345",
+        "iloveyou1234",
+        "razorshield1",
+        "razorshieldai",
+    }
+)
+
+
+class PasswordPolicyError(ValueError):
+    """A password does not meet the policy. The message is shown to the user."""
+
+
+def validate_password_strength(password: str, *, email: str | None = None) -> None:
+    """Raise :class:`PasswordPolicyError` if ``password`` is not acceptable.
+
+    Deliberately short. Every rule below rejects a password an attacker would
+    actually try; none of them is a composition rule, because those push people
+    toward predictable substitutions and a 12-character minimum does more for
+    entropy than requiring a punctuation mark ever did.
+
+    The message names the specific failure, which is safe: this runs on a
+    password the caller just chose, so it reveals nothing about anyone else.
+    """
+    if len(password) < MIN_PASSWORD_LENGTH:
+        raise PasswordPolicyError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
+    if len(password.encode("utf-8")) > MAX_PASSWORD_BYTES:
+        raise PasswordPolicyError(f"Password must be at most {MAX_PASSWORD_BYTES} bytes.")
+    if password.lower() in _OBVIOUS_PASSWORDS:
+        raise PasswordPolicyError("That password is too common. Choose another.")
+    if len(set(password)) < 5:
+        # "aaaaaaaaaaaa" is twelve characters and one bit of information.
+        raise PasswordPolicyError("Password must use at least 5 different characters.")
+    if email:
+        local = email.split("@", 1)[0].strip().lower()
+        if len(local) >= 4 and local in password.lower():
+            raise PasswordPolicyError("Password must not contain your email address.")
+
+
+# ---------------------------------------------------------------------------
+# Password reset tokens
+# ---------------------------------------------------------------------------
+
+#: 32 bytes of `secrets` entropy, URL-safe. Long enough that guessing is not a
+#: threat model, short enough to sit in a query string without wrapping.
+RESET_TOKEN_BYTES = 32
+
+#: How long a reset link is good for. Short, because the window during which a
+#: leaked link (browser history, a forwarded email, a proxy log) is useful is
+#: exactly this long.
+RESET_TOKEN_TTL_MINUTES = 30
+
+
+def generate_reset_token() -> str:
+    """A fresh, cryptographically random reset token. Never stored as-is."""
+    return secrets.token_urlsafe(RESET_TOKEN_BYTES)
+
+
+def hash_reset_token(token: str) -> str:
+    """The value stored in ``password_reset_tokens.token_hash``.
+
+    SHA-256, not bcrypt - and that is the right call rather than a shortcut.
+    bcrypt's cost exists to slow an attacker guessing a *low-entropy* human
+    password. This token carries 256 bits of `secrets` entropy, so there is
+    nothing to guess; the only property needed is that a database leak does not
+    hand over usable tokens, which a one-way hash gives. Using bcrypt here would
+    add a quarter-second to every reset lookup and buy nothing.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def reset_tokens_match(token: str, token_hash: str) -> bool:
+    """Compare a presented token against a stored hash, in constant time."""
+    return hmac.compare_digest(hash_reset_token(token), token_hash)

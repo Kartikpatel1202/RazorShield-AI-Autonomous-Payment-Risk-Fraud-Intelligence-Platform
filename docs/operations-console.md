@@ -7,7 +7,7 @@ found, what the policy decided, and why.
 estimated or computed in the browser. If a number appears on screen, an
 aggregation endpoint produced it from stored rows.
 
-> RazorShield AI is a hackathon simulation. The dataset is synthetic and no real
+> RazorShield AI is a Real-Time Risk Intelligence. The dataset is synthetic and no real
 > Razorpay infrastructure or transaction data is involved.
 
 ## 1. Pages

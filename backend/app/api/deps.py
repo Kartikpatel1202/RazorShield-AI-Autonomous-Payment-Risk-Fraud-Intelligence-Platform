@@ -172,6 +172,8 @@ def rate_limit(bucket: str, setting: str) -> Callable[..., None]:
 
 
 login_rate_limit = rate_limit("login", "rate_limit_login_per_minute")
+signup_rate_limit = rate_limit("signup", "rate_limit_signup_per_minute")
+password_reset_rate_limit = rate_limit("password_reset", "rate_limit_password_reset_per_minute")
 ingest_rate_limit = rate_limit("ingest", "rate_limit_ingest_per_minute")
 simulator_rate_limit = rate_limit("simulator", "rate_limit_simulator_per_minute")
 feedback_rate_limit = rate_limit("feedback", "rate_limit_feedback_per_minute")

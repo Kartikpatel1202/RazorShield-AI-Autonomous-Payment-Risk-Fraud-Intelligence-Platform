@@ -54,6 +54,96 @@ effect immediately rather than whenever the token happens to expire, and a
 demotion applies on the next request even though the old token still says
 `admin`.
 
+### Self-service registration
+
+`POST /api/auth/signup` creates a **viewer** and nothing else. Three independent
+things enforce that, so no single mistake reopens it:
+
+* the request schema has no `role` field and sets `extra="forbid"`, so sending
+  one is a 422 rather than an ignored key;
+* `register_viewer()` takes no role parameter — `test_register_viewer_takes_no_role_parameter`
+  asserts that against the *signature*, so the escalation path fails the moment
+  it exists rather than the moment something uses it;
+* `test_public_signup_cannot_create_a_privileged_account` posts each of the four
+  roles and expects a 422 for every one.
+
+Elevation stays an administrator action through `scripts/manage_users.py`.
+
+Signup returns **no token**. Registration and authentication are separate steps,
+because a signup that silently signs you in makes "register someone else's
+address" a way to obtain a live session.
+
+**The one enumeration trade in the auth flow.** A duplicate address gets a 409
+saying so. That is an oracle, and it is the accepted one: a form that refuses an
+address without saying why produces a user who cannot sign in and cannot find
+out why. It is capped at 5/min, and the two endpoints where the answer would
+actually be useful — login and password reset — reveal nothing at all.
+
+### Password policy
+
+`MIN_PASSWORD_LENGTH` is 12, with no composition rules. Length is what buys
+entropy; "one uppercase, one digit, one symbol" mostly buys `Password1!`. The
+other three rules reject what a length rule alone would admit: a common
+password, fewer than five distinct characters, and a password containing the
+user's own address.
+
+Every entry in the common-password set is at least 12 characters. A shorter one
+would be unreachable — the length rule runs first — and would sit in the file
+looking like protection while doing nothing. Two such entries existed in the
+first draft and were caught by the policy tests.
+
+`GET /api/auth/password-policy` serves the rules the form advertises, so the
+advertised rule and the enforced rule cannot drift apart.
+
+### Password reset
+
+`password_reset_tokens` holds a **SHA-256 digest**, never the token.
+
+SHA-256 and not bcrypt, deliberately. bcrypt's cost exists to slow an attacker
+guessing a low-entropy *human* password; a reset token carries 256 bits of
+`secrets` entropy, so there is nothing to guess. The only property needed is
+that a database leak yields no usable links, which a one-way hash gives. bcrypt
+here would add a quarter-second to every lookup and buy nothing.
+
+| Property | How |
+|---|---|
+| Cryptographically random | `secrets.token_urlsafe(32)` |
+| Hashed at rest | SHA-256; the raw value is never persisted |
+| Short-lived | 30 minutes |
+| Single use | `used_at` stamped in the same transaction as the new hash |
+| Superseded | a new request marks previous tokens used |
+| Cascading | a successful reset invalidates every other live token for the account |
+| Rate limited | 5/min on both request and redemption |
+| Never logged | the lifecycle log records the user id and expiry only |
+
+`forgot-password` answers with one fixed sentence whatever the address turns out
+to be — unknown, deactivated, or successfully issued. `reset-password` answers
+with one fixed 400 for unknown, expired and already-spent, because "that link
+has expired" confirms the token was real.
+
+The policy check runs **before** the token is consumed, so a user who fumbles
+the password requirement still has a live link to try again with.
+
+### ⚠ The local development reset mechanism
+
+There is no SMTP integration in this project. With `AUTH_EXPOSE_DEV_RESET_TOKEN`
+on, `forgot-password` returns the reset URL in its response instead of emailing
+it, and the console shows it in a labelled panel.
+
+**The application refuses to start with that flag on and
+`ENVIRONMENT=production`** — a `ValueError` from the settings validator, not a
+default that could be flipped by one environment variable. A property
+(`dev_reset_token_enabled`) ANDs the flag with `environment != "production"` as
+well, so even a bypassed validator would not expose it.
+
+It is worth being explicit about why: this mechanism hands a password-reset
+capability to whoever asks, and it is an account-existence oracle, since a
+registered address gets a link and an unregistered one does not. Both are
+acceptable on a laptop and neither is acceptable anywhere else.
+
+A deployment with mail available switches the flag off and sends
+`IssuedReset.token` in an email; nothing else changes.
+
 ### Logout, stated honestly
 
 `POST /api/auth/logout` records the event and **does not revoke the token**. A
@@ -126,6 +216,8 @@ Fixed-window counters, per `(bucket, client address)`, in
 | Bucket | Default | Protects |
 |---|---:|---|
 | `login` | 10/min | credential stuffing |
+| `signup` | 5/min | account flooding, and the duplicate-address oracle |
+| `password_reset` | 5/min | reset-link flooding and token guessing |
 | `ingest` | 600/min | transaction ingestion |
 | `simulator` | 30/min | simulator control |
 | `feedback` | 60/min | feedback creation |

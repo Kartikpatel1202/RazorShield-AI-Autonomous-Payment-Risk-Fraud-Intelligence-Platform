@@ -7,7 +7,7 @@ signals, chooses read-only tools to fill the gaps, and explains what it found.
 advice for the deterministic policy engine in a later phase, and nothing in this
 package can approve, block, step up or modify a payment.
 
-> RazorShield AI is a hackathon simulation. The dataset is synthetic and no real
+> RazorShield AI is a Real-Time Risk Intelligence. The dataset is synthetic and no real
 > Razorpay infrastructure or transaction data is involved.
 
 ## 1. Architecture

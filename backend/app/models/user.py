@@ -12,6 +12,7 @@ from app.models.base import CreatedAtMixin, PkMixin, enum_column
 from app.models.enums import UserRole
 
 if TYPE_CHECKING:
+    from app.models.password_reset import PasswordResetToken
     from app.models.review import AnalystDecision, ReviewCase
 
 
@@ -37,6 +38,9 @@ class User(PkMixin, CreatedAtMixin, Base):
         back_populates="assignee", foreign_keys="ReviewCase.assigned_to"
     )
     decisions: Mapped[list[AnalystDecision]] = relationship(back_populates="analyst")
+    password_reset_tokens: Mapped[list[PasswordResetToken]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<User id={self.id} email={self.email!r} role={self.role}>"

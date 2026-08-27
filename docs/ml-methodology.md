@@ -2,7 +2,7 @@
 
 How the risk engine is built, and specifically how it is prevented from cheating.
 
-> RazorShield AI is a hackathon simulation. The dataset is synthetic; nothing
+> RazorShield AI is a Real-Time Risk Intelligence. The dataset is synthetic; nothing
 > here represents real Razorpay infrastructure or real transaction data.
 
 ## The question the model answers

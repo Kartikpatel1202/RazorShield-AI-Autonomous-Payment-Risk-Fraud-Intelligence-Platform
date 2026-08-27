@@ -81,10 +81,30 @@ class Settings(BaseSettings):
     # the multi-worker caveat.
     rate_limit_enabled: bool = True
     rate_limit_login_per_minute: int = 10
+    #: Signup is the one public write endpoint, so it is capped tightly: it is
+    #: both the account-creation flood surface and, because a duplicate address
+    #: is reported, the only enumeration surface in the auth flow.
+    rate_limit_signup_per_minute: int = 5
+    #: Reset requests. Low, because each one invalidates the account's previous
+    #: token - an unthrottled endpoint would let anyone keep a user's inbox full
+    #: and their links perpetually stale.
+    rate_limit_password_reset_per_minute: int = 5
     rate_limit_ingest_per_minute: int = 600
     rate_limit_simulator_per_minute: int = 30
     rate_limit_feedback_per_minute: int = 60
     rate_limit_review_per_minute: int = 60
+
+    #: Return the password-reset link in the API response instead of emailing
+    #: it. There is no SMTP integration in this project, so without this the
+    #: reset flow cannot be exercised at all locally.
+    #:
+    #: Refused outright in production by the validator below - not merely
+    #: defaulted off. A flag that hands a password-reset capability to whoever
+    #: asked for it is not something to leave one environment variable away from
+    #: being on in the deployment that matters.
+    auth_expose_dev_reset_token: bool = True
+    #: Origin the reset link points at. The console, not the API.
+    frontend_base_url: str = "http://localhost:3000"
 
     # --- HTTP security ----------------------------------------------------
     #: Emit ``Strict-Transport-Security``. Off by default because the compose
@@ -120,6 +140,10 @@ class Settings(BaseSettings):
         Checked here rather than at first use so the process fails at startup -
         loudly, before it can mint a single token an attacker could forge.
         """
+        # Order matters. A deployment running on a published signing key is a
+        # worse problem than one exposing the dev reset link, and a validator
+        # reports only its first failure - so the signing key is checked first
+        # and the operator is told about that one.
         if self.environment == "local":
             return self
         if self.jwt_secret in WEAK_JWT_SECRETS:
@@ -133,7 +157,24 @@ class Settings(BaseSettings):
                 f"JWT_SECRET must be at least {MINIMUM_JWT_SECRET_LENGTH} characters "
                 f"in environment '{self.environment}'."
             )
+        if self.auth_expose_dev_reset_token and self.environment == "production":
+            raise ValueError(
+                "AUTH_EXPOSE_DEV_RESET_TOKEN must be false in production: it returns a "
+                "password-reset capability to anyone who asks for one."
+            )
         return self
+
+    @property
+    def dev_reset_token_enabled(self) -> bool:
+        """Whether the reset endpoint may return the link in its response.
+
+        The validator above already refuses to construct a production Settings
+        with the flag on, so this can only ever be redundant. It is here anyway
+        because the cost is one comparison and the failure it guards against -
+        a password-reset capability handed to an anonymous caller - is the worst
+        one in this file.
+        """
+        return self.auth_expose_dev_reset_token and self.environment != "production"
 
     @property
     def cors_origin_list(self) -> list[str]:

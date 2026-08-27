@@ -1,661 +1,2292 @@
 # RazorShield AI
 
-Autonomous payment risk & fraud management.
+### Autonomous Payment Risk & Fraud Management Platform
 
-RazorShield AI is a payment-risk platform that scores incoming transactions, surfaces anomalous
-behaviour, and lets an AI risk agent investigate suspicious activity using tool calls against
-first-party data. Risk signals feed a **deterministic** decision engine - the model advises, rules
-decide - so every approve, challenge, or block outcome is reproducible and explainable. High-impact
-decisions route to a human-in-the-loop review queue, and every automated action is written to an
-immutable audit trail.
+RazorShield AI is a real-time payment risk intelligence platform designed to detect suspicious transaction behaviour, evaluate fraud risk, identify behavioural anomalies, and route high-impact decisions through an explainable investigation workflow.
 
-> **Disclaimer:** RazorShield AI is a hackathon simulation and does not represent real Razorpay
-> production infrastructure or real Razorpay transaction data.
+The platform combines deterministic policy rules, fraud-risk scoring, behavioural anomaly detection, investigation workflows, role-based access control, audit logging, and a controlled transaction simulator into a unified risk operations console.
+
+> **Platform Notice**
+>
+> RazorShield AI is an independent risk-intelligence demonstration platform. It does not represent or connect to Razorpay production infrastructure, production systems, payment gateways, or real customer transaction data. All simulated transactions are clearly identified as `SIMULATED`.
 
 ---
 
-## Current phase
+## Table of Contents
 
-**Phase 10 - Security, Observability & Production Hardening (complete).**
+- [Overview](#overview)
+- [Problem Statement](#problem-statement)
+- [Solution](#solution)
+- [Key Features](#key-features)
+- [Core Risk Pipeline](#core-risk-pipeline)
+- [System Architecture](#system-architecture)
+- [Transaction Processing Workflow](#transaction-processing-workflow)
+- [AI Risk & Anomaly Intelligence](#ai-risk--anomaly-intelligence)
+- [Decision Engine](#decision-engine)
+- [Live Risk Stream](#live-risk-stream)
+- [Investigation Workflow](#investigation-workflow)
+- [Role-Based Access Control](#role-based-access-control)
+- [Audit & Explainability](#audit--explainability)
+- [Technology Stack](#technology-stack)
+- [Database Architecture](#database-architecture)
+- [API Architecture](#api-architecture)
+- [Security](#security)
+- [Demo Environment](#demo-environment)
+- [Dashboard](#dashboard)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Running the Application](#running-the-application)
+- [Demo Walkthrough](#demo-walkthrough)
+- [Testing](#testing)
+- [Production Hardening](#production-hardening)
+- [Project Phases](#project-phases)
+- [Future Roadmap](#future-roadmap)
+- [Why RazorShield AI](#why-razorshield-ai)
+- [Use Cases](#use-cases)
+- [Limitations](#limitations)
+- [Conclusion](#conclusion)
 
-* **Phase 1** established the scaffolding: FastAPI service, SQLAlchemy + Alembic, React shell,
-  Docker packaging, linting, foundation tests. See [docs/phase-1-foundation.md](docs/phase-1-foundation.md).
-* **Phase 2** built the data universe: 15 tables, a deterministic 20,000-transaction simulation
-  dataset with three demo fraud scenarios, and read-only data-access APIs.
-  See [docs/dataset.md](docs/dataset.md).
-* **Phase 3** built the supervised risk engine: a leak-free point-in-time feature pipeline
-  (74 features), a chronologically split training run comparing logistic regression against
-  XGBoost, and a scoring API. See [docs/ml-methodology.md](docs/ml-methodology.md) and
-  [docs/ml-evaluation.md](docs/ml-evaluation.md).
-* **Phase 4** added an independent behavioral anomaly engine: an Isolation Forest over a
-  48-feature behavioral subset, a percentile-based 0-100 score with measured severity bands, and
-  its own API. See [docs/anomaly-evaluation.md](docs/anomaly-evaluation.md).
-* **Phase 5** added the AI risk investigation agent: a bounded tool-using loop over eight read-only
-  tools, evidence-grounded findings, application-computed confidence, and a provider abstraction
-  covering Claude, any OpenAI-compatible endpoint and a deterministic mock.
-  See [docs/investigation-agent.md](docs/investigation-agent.md).
-* **Phase 6** added the deterministic decision engine: a versioned policy of ten typed rules that
-  turns the two model signals and the investigation's structured counts into exactly one of
-  APPROVE / STEP_UP / REVIEW / BLOCK, with an append-only decision record and a human review
-  queue. See [docs/decision-policy.md](docs/decision-policy.md).
-* **Phase 7** added the risk operations console: a dashboard over real SQL aggregates, a
-  server-side transaction explorer, a full decision-pipeline view per transaction, the human
-  review queue, a read-only policy viewer and the audit log.
-  See [docs/operations-console.md](docs/operations-console.md).
-* **Phase 8** closed the loop: structured analyst feedback recorded beside the immutable machine
-  decision, a machine-vs-human confusion matrix, model metrics computed only over labelled data,
-  PSI drift detection, per-rule policy effectiveness, the high-risk block funnel, and a
-  grounded read-only analytical assistant.
-  See [docs/closed-loop-intelligence.md](docs/closed-loop-intelligence.md).
-* **Phase 9** added the live layer: a transaction simulator that generates payment *behaviour*
-  across five scenarios, an idempotent ingestion pipeline that reuses Phases 3-6 unchanged, a
-  durable ordered event stream over server-sent events, and a real-time dashboard.
-  See [docs/live-stream.md](docs/live-stream.md).
-* **Phase 10** hardened it for production: JWT authentication over bcrypt-hashed passwords,
-  permission-based RBAC across every endpoint, per-route rate limiting, security headers, an
-  audited read-only tool surface for the AI agent, structured JSON logs with correlation ids,
-  Prometheus metrics, liveness/readiness probes, and documented behaviour for every failure path.
-  See [docs/security.md](docs/security.md).
+---
 
-Not implemented yet (later phases): a rule builder.
+# Overview
 
-**Phase 2 created the evidence. Phase 3 learns statistical fraud risk from it. Phase 4 detects
-behavioural anomalies independently. Phase 5 investigates and explains both signals. Phase 6
-decides. Phase 7 shows the work. Phase 8 measures whether any of it is working. Phase 9 runs it
-live. Phase 10 locks it down.** The decision is made by deterministic policy rules - no language model participates, and
-the agent's `recommended_action` is not even an input. Every figure on the dashboard comes from a
-database query; none is hardcoded. Feedback is recorded *beside* the machine decision, never
-inside it. The simulator generates behaviour and nothing else: fraud probability, anomaly score
-and the decision are all computed by the existing services, exactly as they are for the seeded
-dataset. Every `/api` endpoint requires a credential and a permission - an inventory test asserts
-there is no exception - and no failure path can turn an outage into an approval.
+Modern payment systems process large volumes of transactions where only a small percentage may represent fraud, account takeover, coordinated activity, or other abnormal behaviour.
 
-## Architecture
+A traditional system that only returns:
 
-```
-                 +----------------------------+
-  Browser  ---->  |  React + TypeScript (Vite) |
-                 |  Tailwind CSS UI shell     |
-                 +-------------+--------------+
-                               |  HTTP / JSON
-                 +-------------v--------------+
-                 |  FastAPI  (backend/app)    |
-                 |  routes -> services -> db  |
-                 +-------------+--------------+
-                               |  SQLAlchemy 2.0 ORM
-                 +-------------v--------------+     +--------------------------+
-                 |  PostgreSQL 16             |<--->|  ml/  risk engines       |
-                 |  15 tables, Alembic        |     |  point-in-time features  |
-                 |  20k simulated payments    |     |   |- XGBoost (fraud)     |
-                 +----------------------------+     |   +- IsolationForest     |
-                                                    |        (anomaly)         |
-                                                    +--------------------------+
-
-                                                            ^
-                 +------------------------------------------+ |
-                 |  agent/  AI risk investigator            |-+
-                 |  8 read-only tools, bounded loop,        |
-                 |  evidence-grounded findings              |
-                 +------------------------------------------+
+```text
+Fraud = TRUE
 ```
 
-The two engines share one feature pipeline but stay independent: the anomaly model never sees the
-fraud label as an input, neither reads the other's output, and they write to different tables.
+is not sufficient for a modern risk operations team.
 
-`backend/` and `ml/` are sibling packages that each place the other on the import path at import
-time, so both work from any entrypoint without an install step or `PYTHONPATH`.
+RazorShield AI is designed around a complete decision lifecycle:
 
-The backend is layered: `api/routes` handles HTTP only, `services` holds logic, `db` owns
-connections and sessions, `schemas` defines the typed request/response contracts. Configuration is
-read once from the environment into a validated `Settings` object.
-
-### Data model
-
+```text
+Transaction
+    ↓
+Risk Evaluation
+    ↓
+Fraud Probability
+    ↓
+Behavioural Anomaly Detection
+    ↓
+Policy Evaluation
+    ↓
+Risk Classification
+    ↓
+Decision
+    ↓
+Investigation / Review
+    ↓
+Analyst Action
+    ↓
+Immutable Audit Trail
 ```
-  Merchant --+--> Customer --+--> Transaction --+--> RiskPrediction --> ModelFeedback
-             |               |          ^       +--> RiskSignal
-             +--> RiskRule   |          |       +--> Investigation
-                             |          |       +--> ReviewCase --> AnalystDecision
-                    CustomerDevice      |       +--> AuditLog
-                             |          |
-                         Device --------+
-                      IpAddress --------+
+
+The objective is not only to identify risky payments, but also to answer:
+
+- Why was this transaction considered risky?
+- Which signals contributed to the risk?
+- Did the model and behavioural engine agree?
+- Which policy rule was triggered?
+- Should the transaction be approved, stepped-up, reviewed, or blocked?
+- Who investigated the case?
+- What action was taken?
+- Can the complete decision chain be audited later?
+
+---
+
+# Problem Statement
+
+Payment platforms face several challenges when detecting financial risk:
+
+### 1. High transaction volume
+
+Large payment systems continuously process transactions, making manual investigation impossible.
+
+### 2. False positives
+
+Aggressive fraud detection can incorrectly block legitimate customers.
+
+### 3. Behavioural fraud
+
+Some attacks cannot be detected reliably from a single transaction.
+
+Examples include:
+
+- coordinated transactions
+- unusual transaction sequences
+- abnormal velocity
+- behavioural anomalies
+- suspicious customer-merchant relationships
+- model disagreement
+
+### 4. Lack of explainability
+
+A risk score alone does not explain why a transaction was flagged.
+
+### 5. Operational complexity
+
+Fraud detection is not complete when a transaction receives a score.
+
+The system also needs:
+
+- investigation queues
+- review workflows
+- analyst actions
+- audit trails
+- access control
+- monitoring
+- policy management
+
+---
+
+# Solution
+
+RazorShield AI addresses these challenges through a multi-stage risk operations pipeline.
+
+Instead of relying on a single fraud score, the platform combines:
+
+```text
+Transaction Data
+      │
+      ▼
+Fraud Risk Model
+      │
+      ├──────────────┐
+      ▼              ▼
+Fraud Probability   Behavioural Anomaly Engine
+      │              │
+      └──────┬───────┘
+             ▼
+        Policy Engine
+             │
+             ▼
+      Risk Classification
+             │
+     ┌───────┼────────┐
+     ▼       ▼        ▼
+  APPROVE  STEP-UP   REVIEW
+                      │
+                      ▼
+                   BLOCK
+             │
+             ▼
+       Investigation
+             │
+             ▼
+       Audit Logging
 ```
 
-`customer_devices` is a many-to-many association: a device shared by several customers is a
-first-class fact, not something inferred from transactions alone.
+This creates an end-to-end risk management system rather than a standalone fraud classifier.
 
-The eight risk tables on the right exist but are **empty**. Later phases own them; populating them
-now would mean inventing risk intelligence that has not been computed.
+---
 
-## Tech stack
+# Key Features
 
-| Layer     | Technology                                                            |
-| --------- | --------------------------------------------------------------------- |
-| Backend   | Python 3.11, FastAPI, Pydantic v2, SQLAlchemy 2.0, Alembic, psycopg 3  |
-| Database  | PostgreSQL 16                                                         |
-| Frontend  | React 19, TypeScript, Vite, Tailwind CSS v4, React Router             |
-| Testing   | pytest + httpx (backend), Vitest + Testing Library (frontend)         |
-| ML        | scikit-learn, XGBoost, pandas, numpy, joblib                          |
-| Agent     | Anthropic SDK / OpenAI-compatible HTTP, behind a provider abstraction |
-| Tooling   | Ruff, mypy (strict), oxlint, TypeScript strict mode                   |
-| Packaging | Docker, Docker Compose, nginx                                         |
-| Policy    | Pure-Python rule engine over a versioned YAML policy (no LLM, no ML)  |
-| Console   | SQL aggregation endpoints + hand-drawn SVG charts (no chart library)  |
-| Monitoring| PSI drift, label-gated model metrics, grounded assistant (no LLM)     |
-| Live      | asyncio simulator + bounded queue + server-sent events (no broker)    |
+## Real-Time Risk Stream
 
-## Repository structure
+The platform provides a live transaction stream where generated payment events pass through the same backend risk pipeline used for transaction evaluation.
 
+The stream exposes:
+
+- transaction ID
+- transaction amount
+- fraud probability
+- anomaly score
+- severity
+- investigation state
+- final decision
+- processing progress
+
+---
+
+## Transaction Explorer
+
+Transactions can be explored using:
+
+- search
+- decision filters
+- risk-level filters
+- anomaly severity
+- advanced filters
+- sorting
+- pagination
+
+The transaction explorer provides a database-backed view of the processed transaction dataset.
+
+---
+
+## Fraud Risk Scoring
+
+Each transaction receives a fraud probability from the risk evaluation layer.
+
+Example:
+
+```text
+Fraud Probability: 94.09%
 ```
+
+The probability is used as one of the signals for downstream policy evaluation.
+
+---
+
+## Behavioural Anomaly Detection
+
+The anomaly engine evaluates behavioural signals independently from the fraud probability.
+
+Example:
+
+```text
+Anomaly Score: 100 / 100
+Severity: CRITICAL
+```
+
+This allows the system to identify suspicious behaviour even when the fraud model itself may not assign a high fraud probability.
+
+---
+
+## Explainable Decisions
+
+Every important decision can be traced through:
+
+```text
+Transaction
+      ↓
+Fraud Model
+      ↓
+Anomaly Engine
+      ↓
+Investigation
+      ↓
+Policy Rules
+      ↓
+Decision
+```
+
+The platform exposes reason codes and matched policy rules to improve explainability.
+
+Example reason codes:
+
+```text
+Model disagreement
+Critical behavioral anomaly
+Coordinated activity
+```
+
+---
+
+## Human-in-the-Loop Investigation
+
+High-impact transactions can be routed to analysts instead of being automatically blocked.
+
+This creates a safer decision architecture:
+
+```text
+Risk detected
+     ↓
+Policy evaluation
+     ↓
+Human review required
+     ↓
+Investigator
+     ↓
+Analyst decision
+     ↓
+Audit trail
+```
+
+---
+
+## Role-Based Access Control
+
+The platform supports multiple operational roles:
+
+- Admin
+- Risk Analyst
+- Merchant
+- Viewer
+
+Different roles can have different permissions for:
+
+- transaction access
+- investigations
+- reviews
+- simulator controls
+- policy management
+- audit access
+
+---
+
+## Audit Logging
+
+Important system actions are recorded so that operational decisions can be reviewed later.
+
+The audit layer provides visibility into:
+
+- authentication events
+- analyst actions
+- policy actions
+- investigation updates
+- decision changes
+- system operations
+
+---
+
+## Controlled Transaction Simulator
+
+The demo environment includes a controlled traffic generator for demonstrating the risk pipeline without using real payment traffic.
+
+Available scenarios can generate different behavioural patterns such as:
+
+- Normal
+- Suspicious
+- Coordinated fraud
+- Ring-like behaviour
+- Additional anomaly scenarios
+
+Every generated transaction is prefixed with:
+
+```text
+SIM_
+```
+
+and is marked:
+
+```text
+SIMULATED
+```
+
+The simulator generates behaviour only.
+
+It does not directly assign:
+
+- fraud probability
+- anomaly score
+- investigation result
+- final decision
+
+Those are produced by the backend risk pipeline.
+
+---
+
+# Core Risk Pipeline
+
+The complete processing architecture can be represented as:
+
+```text
+                    ┌──────────────────────┐
+                    │ Transaction Source   │
+                    │ / Simulator          │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │ Transaction Intake   │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │ Fraud Risk Model     │
+                    │                      │
+                    │ Fraud Probability    │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │ Behavioural Anomaly  │
+                    │ Engine               │
+                    │                      │
+                    │ Anomaly Score        │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │ Investigation Layer  │
+                    │                      │
+                    │ Evidence + Findings  │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │ Policy Engine        │
+                    │                      │
+                    │ Rules + Thresholds   │
+                    └──────────┬───────────┘
+                               │
+                 ┌─────────────┼──────────────┐
+                 │             │              │
+                 ▼             ▼              ▼
+             APPROVE        STEP-UP         REVIEW
+                                                │
+                                                ▼
+                                             BLOCK
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │ Decision Persistence │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │ Audit Trail          │
+                    └──────────────────────┘
+```
+
+---
+
+# System Architecture
+
+```mermaid
+flowchart TB
+
+    USER[Operations User]
+
+    subgraph FRONTEND[Frontend]
+        UI[Risk Operations Console]
+        DASH[Dashboard]
+        LIVE[Live Risk Stream]
+        TX[Transaction Explorer]
+        INV[Investigations]
+        REV[Reviews]
+        POL[Policy]
+        AUD[Audit Log]
+    end
+
+    subgraph BACKEND[Backend]
+        API[FastAPI Service]
+        AUTH[Authentication & RBAC]
+        PIPE[Risk Processing Pipeline]
+        MODEL[Fraud Risk Model]
+        ANOM[Behavioural Anomaly Engine]
+        POLICY[Policy / Decision Engine]
+        CASE[Investigation & Review]
+        AUDIT[Audit Service]
+        SIM[Traffic Simulator]
+    end
+
+    subgraph DATA[Persistence]
+        DB[(PostgreSQL)]
+    end
+
+    USER --> UI
+
+    UI --> DASH
+    UI --> LIVE
+    UI --> TX
+    UI --> INV
+    UI --> REV
+    UI --> POL
+    UI --> AUD
+
+    UI --> API
+
+    API --> AUTH
+    API --> PIPE
+    API --> CASE
+    API --> AUDIT
+    API --> SIM
+
+    PIPE --> MODEL
+    PIPE --> ANOM
+    PIPE --> POLICY
+
+    API --> DB
+    PIPE --> DB
+    CASE --> DB
+    AUDIT --> DB
+```
+
+---
+
+# Transaction Processing Workflow
+
+A transaction follows a controlled processing lifecycle.
+
+## Step 1 — Transaction Intake
+
+A transaction enters the platform.
+
+Example:
+
+```text
+Transaction ID:
+SIM_b57ece52_000010
+
+Amount:
+₹20,900.00
+```
+
+---
+
+## Step 2 — Fraud Model Evaluation
+
+The transaction is evaluated by the fraud-risk layer.
+
+Example:
+
+```text
+Fraud Probability:
+1.48%
+```
+
+The fraud probability is not the only factor used for the final decision.
+
+---
+
+## Step 3 — Behavioural Analysis
+
+The behavioural engine evaluates suspicious activity patterns.
+
+Example:
+
+```text
+Anomaly Score:
+100 / 100
+
+Severity:
+CRITICAL
+```
+
+---
+
+## Step 4 — Investigation
+
+The platform can create an investigation when the combined signals indicate suspicious behaviour.
+
+The investigation can contain:
+
+```text
+Findings
+Evidence
+Reason Codes
+Policy Matches
+Risk Signals
+```
+
+---
+
+## Step 5 — Policy Evaluation
+
+The policy engine evaluates the available signals.
+
+For example:
+
+```text
+Fraud Probability
++
+Anomaly Score
++
+Behavioural Signals
++
+Investigation Findings
++
+Policy Rules
+```
+
+---
+
+## Step 6 — Decision
+
+The transaction is routed to an appropriate outcome.
+
+Possible outcomes:
+
+```text
+APPROVE
+STEP-UP
+REVIEW
+BLOCK
+```
+
+---
+
+## Step 7 — Persistence
+
+The resulting transaction state is stored in PostgreSQL.
+
+---
+
+## Step 8 — Audit
+
+Important actions are recorded in the audit trail.
+
+This allows the platform to reconstruct the operational history of a transaction.
+
+---
+
+# AI Risk & Anomaly Intelligence
+
+RazorShield AI uses multiple signals instead of relying on a single fraud score.
+
+## Fraud Risk
+
+The fraud model produces a probability value:
+
+```text
+0% ─────────────────────────────── 100%
+Low                              High
+```
+
+Example:
+
+```text
+94.09%
+```
+
+---
+
+## Behavioural Anomaly
+
+The behavioural engine evaluates abnormal activity independently.
+
+Example:
+
+```text
+Anomaly Score: 99
+Severity: CRITICAL
+```
+
+---
+
+## Model Disagreement
+
+One important risk signal is disagreement between different intelligence layers.
+
+Example:
+
+```text
+Fraud Probability: LOW
+Anomaly Score: HIGH
+```
+
+This can indicate that a transaction appears statistically normal to the fraud model but behaviourally abnormal to another detection layer.
+
+The system can therefore route such cases for additional investigation instead of relying only on the fraud probability.
+
+---
+
+# Decision Engine
+
+The final decision is produced by policy evaluation.
+
+Conceptually:
+
+```text
+                    Transaction
+                         │
+                         ▼
+              ┌─────────────────────┐
+              │ Risk Signals        │
+              ├─────────────────────┤
+              │ Fraud Probability   │
+              │ Anomaly Score        │
+              │ Severity             │
+              │ Behaviour            │
+              │ Investigation       │
+              └──────────┬──────────┘
+                         │
+                         ▼
+                  Policy Evaluation
+                         │
+            ┌────────────┼────────────┐
+            ▼            ▼            ▼
+         APPROVE       STEP-UP       REVIEW
+                                      │
+                                      ▼
+                                    BLOCK
+```
+
+This separation is intentional:
+
+```text
+Model → advises
+Policy → decides
+Audit → records
+```
+
+This makes the system more deterministic and explainable.
+
+---
+
+# Live Risk Stream
+
+The Live Risk Stream provides an operational view of transactions moving through the pipeline.
+
+The interface shows:
+
+```text
+Throughput
+Processed
+High Risk
+Queue Depth
+Approved
+Step-Up
+Review
+Blocked
+```
+
+It also provides a live transaction feed.
+
+Example:
+
+```text
+Transaction       SIM_b57ece52_000010
+Amount            ₹20,900.00
+Fraud Probability 1.48%
+Anomaly           100
+Severity          CRITICAL
+Investigation     HIGH
+Decision          REVIEW
+```
+
+The stream is backed by the application's controlled transaction-generation and processing pipeline.
+
+It is not connected to live production payment traffic.
+
+---
+
+# Investigation Workflow
+
+A suspicious transaction can move through an investigation workflow.
+
+Example:
+
+```text
+┌──────────────┐
+│ Transaction  │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│ Fraud Model  │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│ Anomaly      │
+│ Detection    │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│ Investigation│
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│ Evidence     │
+│ & Findings   │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│ Policy       │
+│ Decision     │
+└──────┬───────┘
+       │
+       ▼
+┌─────────────────────────┐
+│ APPROVE / STEP-UP /     │
+│ REVIEW / BLOCK          │
+└─────────────────────────┘
+```
+
+An investigation can expose:
+
+- evidence items
+- findings
+- matched policy rules
+- reason codes
+- risk signals
+- final decision
+
+---
+
+# Role-Based Access Control
+
+The system uses role-based access control.
+
+## Admin
+
+Administrative users can manage platform-level operations such as:
+
+- user accounts
+- passwords
+- roles
+- system configuration
+- simulator controls
+- operational administration
+
+---
+
+## Risk Analyst
+
+Risk analysts focus on:
+
+- transaction investigation
+- risk review
+- suspicious activity
+- evidence analysis
+- case handling
+
+---
+
+## Merchant
+
+Merchant users can access merchant-relevant operational information based on assigned permissions.
+
+---
+
+## Viewer
+
+Viewer accounts provide read-only access to permitted areas of the console.
+
+---
+
+# Authentication
+
+Authentication is handled by the backend.
+
+The application supports:
+
+```text
+Sign In
+   ↓
+Credential Validation
+   ↓
+Authenticated Session
+   ↓
+Role Resolution
+   ↓
+Permission Enforcement
+   ↓
+Console Access
+```
+
+Passwords are handled through secure password hashing rather than storing plaintext credentials.
+
+---
+
+# Audit & Explainability
+
+Risk systems require more than a final decision.
+
+RazorShield AI maintains an operational trail around important actions and decisions.
+
+The audit layer helps answer:
+
+```text
+What happened?
+When did it happen?
+Which transaction was involved?
+Which policy was involved?
+Which user performed the action?
+What was the resulting state?
+```
+
+This improves:
+
+- accountability
+- debugging
+- compliance readiness
+- incident investigation
+- operational transparency
+
+---
+
+# Technology Stack
+
+## Frontend
+
+- React
+- Modern JavaScript / TypeScript components
+- Responsive dashboard UI
+- Real-time transaction views
+- Risk visualization
+- Role-aware navigation
+
+## Backend
+
+- Python
+- FastAPI
+- SQLAlchemy
+- PostgreSQL
+- Alembic
+- JWT-based authentication
+
+## Infrastructure
+
+- Docker
+- Docker Compose
+- PostgreSQL container
+- Backend container
+- Frontend container
+
+## Security
+
+- Password hashing
+- JWT authentication
+- Role-based access control
+- Permission enforcement
+- Audit logging
+- Controlled simulator permissions
+
+---
+
+# Database Architecture
+
+PostgreSQL is used as the primary persistence layer.
+
+The database stores the operational state required by the risk platform.
+
+Conceptually:
+
+```text
+                    PostgreSQL
+                        │
+        ┌───────────────┼────────────────┐
+        │               │                │
+        ▼               ▼                ▼
+   Transactions     Users/Roles     Investigations
+        │               │                │
+        │               │                ├── Findings
+        │               │                ├── Evidence
+        │               │                └── Decisions
+        │
+        ├── Risk Signals
+        ├── Fraud Probability
+        ├── Anomaly Score
+        ├── Severity
+        └── Decision
+                        │
+                        ▼
+                   Audit Events
+```
+
+Database migrations are managed through Alembic.
+
+---
+
+# API Architecture
+
+The frontend communicates with the backend through API endpoints.
+
+Conceptual API structure:
+
+```text
+Frontend
+   │
+   ▼
+FastAPI
+   │
+   ├── Authentication
+   ├── Users
+   ├── Transactions
+   ├── Risk Evaluation
+   ├── Investigations
+   ├── Reviews
+   ├── Policies
+   ├── Audit Logs
+   └── Simulator
+```
+
+The backend remains responsible for:
+
+- validation
+- business logic
+- risk processing
+- authorization
+- persistence
+- decision generation
+
+The browser does not calculate the final risk decision.
+
+---
+
+# Security
+
+Security was treated as a core architectural concern rather than an afterthought.
+
+## Authentication
+
+Users authenticate through the application login flow.
+
+---
+
+## Password Security
+
+Passwords are securely hashed before persistence.
+
+Plaintext passwords are not stored in the database.
+
+---
+
+## JWT Authentication
+
+Authenticated requests can be associated with a signed token containing the required identity and authorization context.
+
+---
+
+## Role-Based Authorization
+
+Access to sensitive operations is controlled by user roles and permissions.
+
+For example:
+
+```text
+Viewer
+   ↓
+Read-only operations
+
+Risk Analyst
+   ↓
+Investigation / Review
+
+Admin
+   ↓
+Administrative operations
+```
+
+---
+
+## Simulator Permissions
+
+Traffic generation is intentionally protected.
+
+Starting and stopping the traffic generator requires the appropriate simulator control permission.
+
+This prevents unauthorized users from generating large volumes of simulated traffic.
+
+---
+
+# Demo Environment
+
+RazorShield AI contains a controlled transaction simulator for demonstrating the platform.
+
+The simulator allows operators to choose a scenario and configure:
+
+```text
+Scenario
+Rate / second
+Transaction count
+```
+
+Example:
+
+```text
+Scenario: Coordinated Fraud
+Rate: 1 transaction/sec
+Count: 10
+```
+
+The simulator then generates transactions such as:
+
+```text
+SIM_b57ece52_000001
+SIM_b57ece52_000002
+SIM_b57ece52_000003
+...
+```
+
+These transactions are processed through the backend pipeline.
+
+### Important
+
+The simulator does not directly determine the final risk outcome.
+
+It only generates controlled transaction behaviour.
+
+The existing risk pipeline evaluates the generated events.
+
+---
+
+# Dashboard
+
+The main dashboard provides a command-center view of the current risk environment.
+
+Example metrics include:
+
+```text
+Transactions
+Approval Rate
+High Risk
+Open Reviews
+Step-Up
+Review
+Blocked
+Critical Anomalies
+```
+
+The dashboard also provides risk trends over time.
+
+---
+
+# Screenshots
+
+Add your final screenshots to the repository and reference them here.
+
+## Risk Command Center
+
+```text
+![RazorShield AI Dashboard](docs/images/dashboard.png)
+```
+
+## Live Risk Stream
+
+```text
+![Live Risk Stream](docs/images/live-risk-stream.png)
+```
+
+## Transaction Explorer
+
+```text
+![Transaction Explorer](docs/images/transactions.png)
+```
+
+## Investigation View
+
+```text
+![Investigation Workflow](docs/images/investigation.png)
+```
+
+## Authentication
+
+```text
+![Sign In](docs/images/sign-in.png)
+```
+
+> Recommended GitHub structure:
+>
+> `docs/images/`
+>
+> Store all screenshots and architecture diagrams inside this directory.
+
+---
+
+# Project Structure
+
+```text
 RazorShield-AI/
-|- backend/                 FastAPI service
-|  |- app/
-|  |  |- api/routes/        HTTP endpoints (health, catalog, transactions, risk,
-|  |  |                    reviews, analytics, operations, feedback, live)
-|  |  |- core/              config, logging, error handling
-|  |  |- db/                declarative base, engine, session
-|  |  |- models/            18 ORM models + shared mixins and enums
-|  |  |- schemas/           Pydantic request/response models
-|  |  |- seed/              deterministic dataset generator
-|  |  |- simulator/         live scenario generators and the run engine
-|  |  |- services/          query and aggregation logic
-|  |  +- main.py            application factory
-|  |- scripts/               dataset CLI, decision reset, demo feedback seed
-|  |- tests/                model, seed, API and migration tests
-|  |- alembic.ini
-|  |- requirements.txt / requirements-dev.txt
-|  |- pyproject.toml        ruff / mypy / pytest config
-|  +- Dockerfile
-|- frontend/                React + TypeScript risk operations console
-|  |- src/
-|  |  |- components/        layout shell, UI primitives, hand-drawn charts
-|  |  |- routes/            dashboard, live, transactions, detail, investigations,
-|  |  |                    reviews, feedback, monitoring, rules, audit
-|  |  |- hooks/             data fetching with loading/empty/error states
-|  |  |- lib/               typed API client, formatting, risk semantics
-|  |  +- test/              Vitest setup, render helper and API fixtures
-|  |- nginx.conf
-|  +- Dockerfile
-|- database/
-|  |- migrations/           Alembic env + versions/
-|  +- seed/                 pointer to the Python generator
-|- ml/                      fraud risk engine
-|  |- features/             point-in-time feature pipeline + schema contract
-|  |- training/             dataset build, split, supervised training, report
-|  |- inference/            supervised predictor and batch scoring
-|  |- anomaly/              behavioral contract, Isolation Forest, scoring, report
-|  +- models/               trained artifacts and metrics (build outputs)
-|- agent/                   AI risk investigation agent
-|  |- llm/                  provider abstraction: Claude, OpenAI-compatible, mock
-|  |- tools/                eight read-only investigation tools
-|  |- graph/                bounded investigation loop and state
-|  |- schemas/              evidence and investigation contracts
-|  +- prompts/              system prompts and the untrusted-data fence
-|- policy/                  deterministic decision engine (pure: no db, no LLM)
-|  |- actions.py            the four actions and precedence
-|  |- reasons.py            stable reason codes
-|  |- context.py            what a rule may see - and what it may not
-|  |- schema.py             typed policy configuration and validation
-|  |- loader.py             load, validate, cache
-|  |- rules.py              the ten rules as typed predicates
-|  |- engine.py             evaluate, resolve precedence, fingerprint
-|  +- explain.py            explanation assembled from measured values
-|- config/policies/         versioned policy files (default.yaml)
-|- scripts/                 setup helpers
-|- docs/                    phase notes and dataset documentation
-|- .env.example
-+- docker-compose.yml
+│
+├── backend/
+│   │
+│   ├── app/
+│   │   ├── api/
+│   │   ├── core/
+│   │   ├── models/
+│   │   ├── schemas/
+│   │   ├── services/
+│   │   └── main.py
+│   │
+│   ├── migrations/
+│   │
+│   ├── scripts/
+│   │   └── manage_users.py
+│   │
+│   ├── tests/
+│   │
+│   ├── requirements.txt
+│   └── Dockerfile
+│
+├── frontend/
+│   │
+│   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   ├── services/
+│   │   └── ...
+│   │
+│   ├── package.json
+│   └── Dockerfile
+│
+├── docs/
+│   └── images/
+│
+├── docker-compose.yml
+│
+├── README.md
+│
+└── .env.example
 ```
 
-## Local setup
+---
 
-Prerequisites: **Python 3.11+**, **Node.js 20+**, and either **Docker** or a local PostgreSQL 16.
+# Getting Started
+
+## Prerequisites
+
+Install:
+
+- Python 3.x
+- Node.js
+- npm
+- Docker Desktop
+- Git
+
+Docker Desktop is recommended because the project uses containerized services.
+
+---
+
+# Running the Application
+
+## 1. Clone the Repository
 
 ```bash
-cp .env.example .env
+git clone <YOUR_REPOSITORY_URL>
+cd RazorShield-AI
 ```
 
-Then fill in the placeholders and run the setup helper for your shell:
+---
+
+## 2. Start the Application
 
 ```bash
-bash scripts/setup.sh
+docker compose up -d
 ```
+
+Check running containers:
 
 ```bash
-powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
+docker compose ps
 ```
 
-Or do it manually:
+Expected services:
+
+```text
+razorshield-postgres
+razorshield-backend
+razorshield-frontend
+```
+
+---
+
+## 3. Access the Application
+
+Frontend:
+
+```text
+http://localhost:3000
+```
+
+Backend:
+
+```text
+http://localhost:8000
+```
+
+---
+
+# Local Backend Development
+
+If running the backend outside Docker:
+
+```powershell
+cd backend
+```
+
+Activate the virtual environment:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Verify dependencies:
+
+```powershell
+python -c "import jwt; print(jwt.__version__)"
+```
+
+Run the backend according to the project's configured development command.
+
+---
+
+# User Management
+
+Administrative user management is provided through:
+
+```text
+backend/scripts/manage_users.py
+```
+
+Display available commands:
 
 ```bash
-python -m venv backend/.venv
-backend/.venv/Scripts/python.exe -m pip install -r backend/requirements-dev.txt
+python scripts/manage_users.py --help
 ```
+
+List users:
 
 ```bash
-cd frontend && npm install
+python scripts/manage_users.py list
 ```
 
-## Environment variables
-
-Defined in `.env.example`. `.env` is git-ignored and must never be committed.
-
-| Variable            | Required | Description                                                       |
-| ------------------- | -------- | ----------------------------------------------------------------- |
-| `ENVIRONMENT`       | no       | `local`, `development`, `staging` or `production`                 |
-| `LOG_LEVEL`         | no       | Python log level, default `INFO`                                  |
-| `DATABASE_URL`      | **yes**  | SQLAlchemy URL, e.g. `postgresql+psycopg://user:pass@host:5432/db` |
-| `POSTGRES_USER`     | compose  | Username created by the postgres container                        |
-| `POSTGRES_PASSWORD` | compose  | Password for that user                                            |
-| `POSTGRES_DB`       | compose  | Database created on first start                                   |
-| `POSTGRES_PORT`     | no       | Host port mapped to postgres, default `5432`                      |
-| `JWT_SECRET`        | **yes**  | Access-token signing key. Refused at startup outside `local` if left at the template value or shorter than 32 characters |
-| `ACCESS_TOKEN_TTL_MINUTES` | no | Token lifetime, default 60                                    |
-| `RATE_LIMIT_ENABLED`| no       | Per-route rate limiting, default on                               |
-| `HSTS_ENABLED`      | no       | Emit `Strict-Transport-Security`. Leave off without TLS           |
-| `MAX_REQUEST_BYTES` | no       | Largest accepted request body, default 1 MiB                      |
-| `DATABASE_STATEMENT_TIMEOUT_MS` | no | PostgreSQL `statement_timeout`, default 15000 (0 disables) |
-| `LLM_PROVIDER`      | no       | `mock` (default), `anthropic` or `openai_compatible`              |
-| `LLM_API_KEY`       | no       | API key for the investigation agent. Unset means the mock is used |
-| `LLM_MODEL`         | no       | Model id, default `claude-opus-5`                                 |
-| `LLM_BASE_URL`      | no       | Endpoint for the OpenAI-compatible provider                       |
-| `AGENT_MAX_ITERATIONS` | no    | Cap on the agent's tool-selection rounds, default 8               |
-| `CORS_ORIGINS`      | no       | Comma-separated allowed browser origins                           |
-| `VITE_API_BASE_URL` | no       | Backend base URL baked into the frontend bundle                   |
-
-## Running the backend
-
-From `backend/`:
+Create a user:
 
 ```bash
-.venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8000
+python scripts/manage_users.py create
 ```
 
-| Endpoint     | Purpose                                                       |
-| ------------ | ------------------------------------------------------------- |
-| `/health`    | Liveness - `{"status":"ok","service":"razorshield-backend"}`   |
-| `/health/db` | Readiness - verifies the PostgreSQL connection                 |
-| `/docs`      | Interactive OpenAPI documentation                              |
-
-### Data-access API
-
-All read-only. Path parameters accept either the business key or the numeric primary key.
-
-| Endpoint                                          | Returns                                        |
-| ------------------------------------------------- | ---------------------------------------------- |
-| `GET /api/merchants`                              | Every merchant                                 |
-| `GET /api/customers/{customer_id}`                | One customer with historical counters          |
-| `GET /api/customers/{customer_id}/transactions`   | That customer's history, paginated, newest first |
-| `GET /api/devices/{device_id}`                    | One device fingerprint                         |
-| `GET /api/devices/{device_id}/transactions`       | Every payment from that device, paginated      |
-| `GET /api/ip-addresses/{ip_id}`                   | One IP address with its simulated reputation   |
-| `GET /api/ip-addresses/{ip_id}/transactions`      | Every payment from that IP, paginated          |
-| `GET /api/transactions`                           | Transaction feed, paginated; filters: `merchant_id`, `status`, `is_fraud` |
-| `GET /api/transactions/{transaction_id}`          | One transaction                                |
-| `GET /api/transactions/{transaction_id}/context`  | Transaction plus customer, device, IP, location, velocity windows and recent history |
-| `POST /api/risk/predict`                          | Supervised fraud probability (XGBoost) |
-| `POST /api/risk/anomaly`                          | Unsupervised behavioral anomaly (Isolation Forest) |
-| `POST /api/investigations`                        | Run an evidence-grounded AI investigation |
-| `GET /api/investigations/{investigation_id}`      | Fetch a stored investigation |
-| `GET /api/transactions/{transaction_id}/investigation` | The latest investigation of a transaction |
-
-List endpoints take `page` (>=1) and `page_size` (<=200, default 50) and respond with
-`{"items": [...], "meta": {...}}`. Monetary and decimal values are serialised as JSON strings to
-preserve exactness.
-
-### Scoring a transaction
+Set or replace a password:
 
 ```bash
-curl -X POST http://localhost:8000/api/risk/predict -H 'content-type: application/json' -d '{"transaction_id":"TXN_SCENARIO_B_CURRENT"}'
+python scripts/manage_users.py set-password --email <EMAIL>
 ```
 
-```json
-{
-  "transaction_id": "TXN_SCENARIO_B_CURRENT",
-  "fraud_probability": 0.9996440410614014,
-  "risk_score": 100,
-  "model_version": "xgboost-v1",
-  "threshold": 0.5332090258598328,
-  "exceeds_threshold": true,
-  "created_at": "2026-08-22T11:05:34.972575Z"
-}
-```
-
-The probability comes from the trained model; `risk_score` is `round(probability * 100)` and
-applies no policy. Results are stored in `risk_predictions`, one current score per transaction.
-Returns 404 for an unknown transaction and 503 if no trained model is available.
-
-### Assessing a transaction's behaviour
+Deactivate an account:
 
 ```bash
-curl -X POST http://localhost:8000/api/risk/anomaly -H 'content-type: application/json' -d '{"transaction_id":"TXN_SCENARIO_C_CURRENT_1"}'
+python scripts/manage_users.py deactivate
 ```
 
-```json
-{
-  "transaction_id": "TXN_SCENARIO_C_CURRENT_1",
-  "anomaly_score": 100,
-  "severity": "CRITICAL",
-  "model_version": "isolation-forest-v1",
-  "threshold": 96.1,
-  "exceeds_threshold": true,
-  "customer_deviation_score": 100,
-  "customer_deviation_driver": "transactions_last_1h",
-  "top_deviations": [{"feature": "transactions_last_1h", "value": 4.0, "percentile": 100.0}]
-}
+> Always use the project's configured environment variables and database before executing administrative commands.
+
+---
+
+# Demo Walkthrough
+
+The following sequence is recommended for presenting RazorShield AI.
+
+## Step 1 — Sign In
+
+Login using an authorized account.
+
+The console opens according to the user's role and permissions.
+
+---
+
+## Step 2 — Open Dashboard
+
+Navigate to:
+
+```text
+Dashboard
 ```
 
-`anomaly_score` is a **percentile of normal behaviour**, not a fraud probability: it says the
-transaction is more unusual than N% of known-normal traffic, so a perfectly typical payment sits
-near 50. Results are written to `risk_signals` and never touch `risk_predictions`.
+Show:
 
-### Investigating a transaction
+- total transactions
+- approval rate
+- high-risk transactions
+- open reviews
+- blocked transactions
+- critical anomalies
+- risk trend
 
-```bash
-curl -X POST http://localhost:8000/api/investigations -H 'content-type: application/json' -d '{"transaction_id":"TXN_SCENARIO_C_CURRENT_1"}'
+Explain that the dashboard aggregates information persisted by the backend.
+
+---
+
+## Step 3 — Open Live Risk Stream
+
+Navigate to:
+
+```text
+Live
 ```
 
-The agent reads both model signals, chooses read-only tools to fill the gaps, and returns findings
-that each cite evidence a tool actually produced. `recommended_action` is **advice** - nothing in
-the system executes it. With no `LLM_API_KEY` configured the deterministic mock provider is used
-and every investigation is flagged `agent_is_mock: true`.
+The Live Risk Stream provides the controlled real-time demonstration environment.
 
-Method, tools, grounding and the injection defences: [docs/investigation-agent.md](docs/investigation-agent.md).
+---
 
-### Deciding a transaction
+## Step 4 — Start Traffic
 
-```bash
-curl -X POST http://localhost:8000/api/risk/decision -H 'content-type: application/json' -d '{"transaction_id":"TXN_SCENARIO_C_CURRENT_1"}'
+Select a scenario.
+
+Recommended demonstration:
+
+```text
+Scenario:
+Coordinated Fraud
+
+Rate:
+1 / second
+
+Count:
+10
 ```
 
-```json
-{
-  "decision_id": "DEC-...",
-  "transaction_id": "TXN_SCENARIO_C_CURRENT_1",
-  "decision": "REVIEW",
-  "policy_version": "policy-v1",
-  "matched_rules": ["HIGH_ANOMALY_WITH_CORROBORATION", "MODEL_DISAGREEMENT_HIGH_ANOMALY", "MODERATE_COMBINED_RISK"],
-  "deciding_rules": ["HIGH_ANOMALY_WITH_CORROBORATION", "MODEL_DISAGREEMENT_HIGH_ANOMALY"],
-  "reason_codes": ["CRITICAL_BEHAVIORAL_ANOMALY", "MULTIPLE_HIGH_SEVERITY_FINDINGS", "COORDINATED_ACTIVITY", "MODEL_DISAGREEMENT"],
-  "requires_human_review": true,
-  "input_digest": "73774c79..."
-}
+Click:
+
+```text
+Start
 ```
 
-The decision is made by **deterministic policy rules**. No language model participates - the
-agent's `recommended_action` is not an input, and no field in the decision context can carry it.
-Every threshold comes from a measured operating point and lives in `config/policies/default.yaml`,
-not in Python.
+The simulator begins generating controlled transactions.
 
-Decisions are appended to `risk_decisions`, which is immutable: re-deciding a transaction adds a
-row rather than editing one. `REVIEW` and `BLOCK` open a case in the review queue.
+---
 
-```bash
-curl 'http://localhost:8000/api/reviews?status=open'
+## Step 5 — Observe Processing
+
+The generated transactions appear in the live feed.
+
+For example:
+
+```text
+SIM_b57ece52_000010
 ```
 
-```bash
-curl -X POST http://localhost:8000/api/reviews/1/resolve -H 'content-type: application/json' -d '{"resolution":"approved","reason":"verified with the customer"}'
+The transaction progresses through:
+
+```text
+Transaction
+      ↓
+Fraud Model
+      ↓
+Anomaly
+      ↓
+Investigation
+      ↓
+Decision
 ```
 
-A resolution is recorded *alongside* the machine decision, never over it, so analyst overrides
-stay countable. Rules, thresholds and their measurements: [docs/decision-policy.md](docs/decision-policy.md).
+---
 
-### Running the live simulator
+## Step 6 — Show Risk Signals
 
-```bash
-curl -X POST http://localhost:8000/api/simulator/start -H 'content-type: application/json' -d '{"scenario":"coordinated_fraud","transactions_per_second":2,"max_transactions":20,"seed":42}'
+Open the live investigation.
+
+Demonstrate:
+
+```text
+Transaction Amount
+Fraud Probability
+Anomaly Score
+Severity
+Investigation Level
+Decision
 ```
 
-```bash
-curl http://localhost:8000/api/simulator/status
+Then show:
+
+```text
+Findings
+Evidence
+Policy Rules
+Reason Codes
 ```
 
-The simulator generates transaction **behaviour** - amounts, devices, IPs, locations, velocity -
-and feeds it through the existing pipeline. It never sets a fraud probability, an anomaly score
-or a decision; those are computed by Phases 3, 4 and 6 from the behaviour. Every generated
-transaction is prefixed `SIM_` and is never presented as production traffic.
+---
 
-Runs are bounded (`max_transactions`, capped at 5,000) and rate-limited (0.1-50/s). A bounded
-queue provides backpressure: if the pipeline is slower than the requested rate the producer waits
-rather than dropping events, and `queue_depth` plus `observed_tps` make the saturation visible.
+## Step 7 — Open Transactions
 
-Submit a single event directly:
+Navigate to:
 
-```bash
-curl -X POST http://localhost:8000/api/events/transactions -H 'content-type: application/json' -d '{"transaction_id":"SIM_demo_0001","amount":"24500.00","currency":"INR","customer_id":"SIM_CUS_1","merchant_id":"mrc_0004","payment_method":"card","country":"SG","city":"Singapore","timestamp":"2026-08-24T12:00:00Z","device_id":"SIM_dev_1","device_type":"web_desktop","ip_address":"198.18.100.31","ip_country":"SG","ip_is_proxy":true}'
+```text
+Transactions
 ```
 
-Ingestion is idempotent on `transaction_id`: submitting the same reference twice returns the
-first result and creates no second decision.
+Show how the generated transactions are now available in the transaction explorer.
 
-### Watching the live stream
+Demonstrate:
 
-```bash
-curl -N http://localhost:8000/api/events/stream
+- search
+- filtering
+- sorting
+- risk level
+- anomaly severity
+- decision
+
+---
+
+## Step 8 — Show Investigation
+
+Open a suspicious transaction.
+
+Explain:
+
+```text
+The system does not simply say "fraud".
+
+It shows the evidence and signals that contributed
+to the operational decision.
 ```
 
-Server-sent events, one per pipeline stage, ordered by a monotonic `sequence` that doubles as the
-SSE `id`. A reconnecting client sends it back as `Last-Event-ID` and receives exactly what it
-missed. Method, ordering and measured latency: [docs/live-stream.md](docs/live-stream.md).
+---
 
-### Recording analyst feedback
+## Step 9 — Show Audit Log
 
-Resolving a case answers *what we did*. Feedback answers *what was true* - a different question,
-stored separately so both stay measurable.
+Navigate to:
 
-```bash
-curl -X POST http://localhost:8000/api/feedback -H 'content-type: application/json' -d '{"transaction_id":"TXN_SCENARIO_C_CURRENT_1","outcome":"confirmed_fraud","reason_code":"coordinated_activity","notes":"Shared device and IP confirmed across three customers."}'
+```text
+Audit Log
 ```
 
-Outcomes and reasons are closed enums, and the pairing is validated - `legitimate` with
-`account_takeover` is rejected as the contradiction it is. Feedback never writes to
-`risk_decisions`; the append-only guard would raise.
+Explain how important actions can be traced back to operational events.
 
-### Monitoring
+---
 
-```bash
-curl 'http://localhost:8000/api/monitoring/models'
+# Example Risk Scenario
+
+Consider a transaction:
+
+```text
+Transaction:
+SIM_b57ece52_000010
+
+Amount:
+₹20,900.00
+
+Fraud Probability:
+1.48%
+
+Anomaly Score:
+100 / 100
+
+Severity:
+CRITICAL
+
+Investigation:
+HIGH
+
+Decision:
+REVIEW
 ```
 
-```bash
-curl 'http://localhost:8000/api/monitoring/drift'
+At first glance, the fraud probability is relatively low.
+
+However, the behavioural anomaly score is critical.
+
+This demonstrates why a modern risk platform should not rely on only one signal.
+
+The transaction can therefore be routed for investigation instead of blindly approving it.
+
+---
+
+# Testing
+
+The project includes testing around the backend and application behaviour.
+
+Recommended validation areas include:
+
+### Authentication
+
+```text
+Valid credentials → Login succeeds
+Invalid credentials → Login rejected
+Inactive account → Access denied
 ```
 
-```bash
-curl 'http://localhost:8000/api/monitoring/high-risk-funnel'
+### Authorization
+
+```text
+Viewer → Restricted administrative actions denied
+Risk Analyst → Investigation access allowed
+Admin → Administrative operations allowed
 ```
 
-Model metrics are computed **only** over analyst-labelled transactions; the ~19,800 unlabelled
-ones are excluded, never counted as legitimate. Below 30 labels the metric is withheld with
-*"Insufficient labeled data"* rather than published. Drift is Population Stability Index against a
-baseline window, and a `DRIFT_DETECTED` status means a distribution moved - never that fraud
-occurred.
+### Transaction Processing
 
-The high-risk funnel answers the question Phase 7 raised: 258 transactions crossed the block
-threshold and one was blocked, because 257 of them have no investigation to corroborate the
-model. Method, thresholds and their derivation:
-[docs/closed-loop-intelligence.md](docs/closed-loop-intelligence.md).
-
-### Seeding demo feedback
-
-The monitoring pages need labels to have anything to measure. This writes **simulated** ones,
-each flagged as such in its notes and attributed to no analyst:
-
-```bash
-python scripts/seed_demo_feedback.py --dry-run
+```text
+Input transaction
+       ↓
+Risk evaluation
+       ↓
+Anomaly evaluation
+       ↓
+Policy evaluation
+       ↓
+Decision
+       ↓
+Persistence
 ```
 
-```bash
-python scripts/seed_demo_feedback.py --yes
+### Simulator
+
+```text
+Start simulator
+      ↓
+Generate transactions
+      ↓
+Process transactions
+      ↓
+Observe live feed
+      ↓
+Verify persisted records
 ```
 
-Outcomes derive from the dataset's generation-time `is_fraud` column, which makes the resulting
-precision and recall a measurement of *the model against the simulator* - a demonstration of the
-machinery, not a claim about real-world accuracy. Run `--purge --yes` to empty the table and see
-the honest "insufficient labeled data" behaviour instead.
+---
 
-### Training the risk engine
+# Production Hardening
 
-From the repository root, with the database seeded:
+The current system is designed as a controlled risk-intelligence demonstration platform.
 
-```bash
-python -m ml.training.build_dataset
+For production deployment, additional infrastructure would be required.
+
+Potential production improvements include:
+
+- managed PostgreSQL
+- Redis or distributed queues
+- Kafka / event streaming
+- horizontal backend scaling
+- Kubernetes
+- centralized logging
+- distributed tracing
+- secrets management
+- cloud-based object storage
+- model monitoring
+- feature stores
+- rate limiting
+- WAF
+- service-to-service authentication
+- encrypted communication
+- automated CI/CD
+- disaster recovery
+- database replication
+- high-availability architecture
+
+---
+
+# Production-Scale Architecture
+
+A future production architecture could look like:
+
+```text
+                  Payment Sources
+                        │
+                        ▼
+               ┌─────────────────┐
+               │ API Gateway     │
+               └────────┬────────┘
+                        │
+                        ▼
+               ┌─────────────────┐
+               │ Event Streaming │
+               │ Kafka / Queue   │
+               └────────┬────────┘
+                        │
+              ┌─────────┴─────────┐
+              │                   │
+              ▼                   ▼
+       Fraud Risk Service   Behaviour Engine
+              │                   │
+              └─────────┬─────────┘
+                        │
+                        ▼
+                Policy Engine
+                        │
+            ┌───────────┼───────────┐
+            ▼           ▼           ▼
+         APPROVE      STEP-UP      REVIEW
+                                    │
+                                    ▼
+                               Investigation
+                                    │
+                                    ▼
+                                  BLOCK
+                                    │
+                                    ▼
+                             Audit Platform
 ```
 
-```bash
-python -m ml.training.train
+---
+
+# Project Phases
+
+The platform was developed incrementally through multiple phases.
+
+## Phase 1 — Foundation
+
+Established the core application scaffolding:
+
+- FastAPI service
+- SQLAlchemy
+- Alembic
+- React frontend
+- Docker packaging
+- foundational tests
+
+---
+
+## Phase 2 — Data Foundation
+
+Established the transaction universe and initial dataset required for risk evaluation.
+
+---
+
+## Phase 3 — Risk Intelligence
+
+Implemented risk evaluation and behavioural signals.
+
+---
+
+## Phase 4 — Policy & Decisions
+
+Established deterministic policy evaluation and decision routing.
+
+---
+
+## Phase 5 — Investigation
+
+Introduced:
+
+- investigations
+- evidence
+- findings
+- reason codes
+- human review workflows
+
+---
+
+## Phase 6 — Operations Console
+
+Introduced:
+
+- dashboard
+- transaction explorer
+- live stream
+- operational metrics
+- risk monitoring
+
+---
+
+## Phase 7 — Simulation
+
+Introduced controlled transaction generation for demonstration and testing.
+
+---
+
+## Phase 8 — Authentication & RBAC
+
+Introduced:
+
+- authentication
+- roles
+- permissions
+- administrative user management
+
+---
+
+## Phase 9 — Auditability
+
+Introduced operational audit logging and traceability.
+
+---
+
+## Phase 10 — Security, Observability & Production Hardening
+
+Focused on:
+
+- security
+- permission enforcement
+- operational visibility
+- containerization
+- production-readiness foundations
+
+---
+
+# Future Roadmap
+
+RazorShield AI can evolve into a larger intelligent payment-risk platform.
+
+## 1. Real Payment Gateway Integration
+
+Future integrations could connect the platform to authorized payment providers through secure APIs or event streams.
+
+The current project intentionally does not connect to real payment production traffic.
+
+---
+
+## 2. Streaming Architecture
+
+Replace controlled simulation with production-grade event streaming:
+
+```text
+Payment Event
+      ↓
+Kafka
+      ↓
+Risk Processing
+      ↓
+Decision Engine
 ```
 
-```bash
-python -m ml.training.report
+---
+
+## 3. Advanced ML Models
+
+Future versions could incorporate:
+
+- gradient boosting
+- deep learning
+- graph neural networks
+- sequence models
+- behavioural embeddings
+- online learning
+
+---
+
+## 4. Graph-Based Fraud Detection
+
+A transaction graph could represent:
+
+```text
+Customer
+   │
+   ├── Device
+   │
+   ├── Payment Method
+   │
+   ├── Merchant
+   │
+   └── IP / Location
 ```
 
-Then score everything at once:
+Graph analysis could identify coordinated fraud rings and hidden relationships.
 
-```bash
-python -m ml.inference.batch_predict --all
+---
+
+## 5. Agentic Risk Investigation
+
+A future AI risk agent could assist analysts by:
+
+```text
+Suspicious Transaction
+        ↓
+Agent retrieves evidence
+        ↓
+Agent analyzes behaviour
+        ↓
+Agent checks related entities
+        ↓
+Agent summarizes findings
+        ↓
+Agent recommends action
+        ↓
+Human approves / rejects
 ```
 
-Method and leakage controls: [docs/ml-methodology.md](docs/ml-methodology.md).
-Measured results: [docs/ml-evaluation.md](docs/ml-evaluation.md).
+The human remains in control of high-impact actions.
 
-### Training the anomaly engine
+---
 
-Reuses the Phase 3 dataset and split, so both engines are evaluated on identical folds:
+## 6. Automated Experimentation
 
-```bash
-python -m ml.anomaly.train
+The system could eventually evaluate policy changes through controlled experiments.
+
+For example:
+
+```text
+Policy A
+   ↓
+Current fraud detection
+
+Policy B
+   ↓
+New threshold / model
+
+        ↓
+
+Compare:
+False Positives
+Fraud Capture
+Review Volume
+Customer Friction
 ```
 
-```bash
-python -m ml.anomaly.compare
+---
+
+# Why RazorShield AI
+
+RazorShield AI is designed around a broader concept than simple fraud detection.
+
+The platform connects:
+
+```text
+Detection
+    +
+Explainability
+    +
+Policy
+    +
+Investigation
+    +
+Human Review
+    +
+Auditability
+    +
+Security
 ```
 
-```bash
-python -m ml.anomaly.report
+This creates a complete risk-operations workflow.
+
+The important architectural principle is:
+
+> **Models provide intelligence, policies make deterministic decisions, humans handle high-impact cases, and audit logs preserve accountability.**
+
+---
+
+# Use Cases
+
+RazorShield AI can be adapted for:
+
+### Payment Fraud
+
+Detect suspicious payment behaviour and route risky transactions for investigation.
+
+### Account Takeover
+
+Identify abnormal customer behaviour and unusual transaction patterns.
+
+### Coordinated Fraud
+
+Detect related suspicious activities across customers, devices, merchants, or transaction groups.
+
+### Merchant Risk
+
+Monitor merchant-level behavioural anomalies and transaction patterns.
+
+### Financial Crime Operations
+
+Provide investigators with evidence-backed risk signals and operational workflows.
+
+### Security Operations
+
+Create a unified console for monitoring suspicious transactional activity.
+
+---
+
+# Observability
+
+Operational monitoring can be extended around:
+
+```text
+API latency
+Transaction throughput
+Queue depth
+Processing failures
+Decision distribution
+Risk distribution
+Investigation volume
+Model behaviour
+System health
 ```
 
-```bash
-python -m ml.anomaly.batch_predict --all
+The operational dashboard provides a high-level view of platform activity.
+
+---
+
+# Design Principles
+
+## 1. Explainability First
+
+Every important decision should have understandable supporting signals.
+
+## 2. Human-in-the-Loop
+
+High-impact decisions can be routed to analysts.
+
+## 3. Deterministic Policy
+
+Policies provide predictable and reproducible outcomes.
+
+## 4. Separation of Concerns
+
+The architecture separates:
+
+```text
+Model
+Policy
+Investigation
+Decision
+Audit
 ```
 
-`compare` cross-tabulates the two signals into a four-quadrant matrix without combining them.
-Measured results: [docs/anomaly-evaluation.md](docs/anomaly-evaluation.md).
+## 5. Secure by Default
 
-### Seeding the dataset
+Sensitive operations require appropriate authorization.
 
-From `backend/`, with the database migrated:
+## 6. Observable Operations
 
-```bash
-python scripts/seed_data.py
+Risk systems need visibility into both transaction behaviour and system behaviour.
+
+## 7. Controlled Demonstration
+
+The simulator enables realistic risk workflows without requiring real payment traffic.
+
+---
+
+# Important Distinction: Simulator vs Risk Engine
+
+The simulator and risk engine have separate responsibilities.
+
+### Simulator
+
+Generates:
+
+```text
+Transaction behaviour
+Transaction events
+Controlled scenarios
 ```
 
-Rebuilds the whole simulation dataset deterministically and prints a summary. The run is one
-transaction: if validation fails, nothing is committed. Full options and the dataset's composition
-are documented in [docs/dataset.md](docs/dataset.md).
+### Risk Pipeline
 
-### Other backend commands
+Determines:
 
-All run from `backend/`:
-
-```bash
-.venv/Scripts/python.exe -m pytest
+```text
+Fraud probability
+Anomaly score
+Severity
+Investigation
+Policy match
+Decision
 ```
 
-Lint and format both Python trees from the repository root (config lives in `ruff.toml`):
+Therefore:
 
-```bash
-backend/.venv/Scripts/ruff.exe check backend/app backend/tests backend/scripts ml
+```text
+Simulator
+    ↓
+"Generate behaviour"
+
+Risk Pipeline
+    ↓
+"Understand behaviour"
 ```
 
-```bash
-.venv/Scripts/python.exe -m mypy app ../ml
+This separation makes the demonstration architecture closer to a real risk-processing system.
+
+---
+
+# Data Flow Summary
+
+```text
+┌──────────────────────┐
+│ Transaction Source   │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│ Transaction Intake   │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│ Fraud Risk Model     │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│ Anomaly Detection    │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│ Investigation Engine │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│ Policy Engine        │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│ Decision             │
+│                      │
+│ APPROVE              │
+│ STEP-UP              │
+│ REVIEW               │
+│ BLOCK                │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│ PostgreSQL           │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│ Audit Trail          │
+└──────────────────────┘
 ```
 
-```bash
-.venv/Scripts/alembic.exe upgrade head
+---
+
+# Example Operational Lifecycle
+
+```text
+1. Transaction arrives
+          ↓
+2. Risk model evaluates transaction
+          ↓
+3. Behaviour engine checks anomaly
+          ↓
+4. Investigation collects evidence
+          ↓
+5. Policy engine evaluates risk
+          ↓
+6. Decision is generated
+          ↓
+7. High-risk transaction may enter review
+          ↓
+8. Analyst investigates
+          ↓
+9. Action is recorded
+          ↓
+10. Audit trail preserves the operation
 ```
 
-Migration tests need a disposable PostgreSQL database and are skipped without one:
+---
 
-```bash
-TEST_DATABASE_URL=postgresql+psycopg://razorshield:PASSWORD@localhost:5432/razorshield_test .venv/Scripts/python.exe -m pytest
+# Project Highlights
+
+### End-to-End Risk Pipeline
+
+Transaction → Model → Anomaly → Investigation → Policy → Decision → Audit
+
+### Real-Time Operational Console
+
+A unified interface for monitoring risk activity.
+
+### Explainable Risk Decisions
+
+Risk outcomes are supported by signals, findings, policy matches, and reason codes.
+
+### Human-in-the-Loop
+
+High-impact cases can be routed to human analysts.
+
+### Controlled Traffic Simulation
+
+Realistic payment-risk scenarios can be demonstrated safely without production traffic.
+
+### Secure Access
+
+Authentication and role-based authorization protect sensitive operations.
+
+### Persistent Data
+
+Transactions and operational state are stored in PostgreSQL.
+
+### Containerized Deployment
+
+The application can be launched using Docker Compose.
+
+---
+
+# Limitations
+
+RazorShield AI is currently a demonstration and engineering platform.
+
+It does not currently represent:
+
+- a production payment gateway
+- real Razorpay infrastructure
+- real Razorpay transaction traffic
+- real customer financial data
+- a production banking system
+- a fully production-scale fraud detection service
+
+The controlled simulator is intentionally used to demonstrate the complete risk workflow safely.
+
+---
+
+# Disclaimer
+
+> **RazorShield AI is an independent Real-Time Risk Intelligence demonstration platform. It is not affiliated with, operated by, or connected to Razorpay production infrastructure. The platform does not process real Razorpay payment traffic or real customer transaction data. All simulator-generated transactions are synthetic and clearly identified as `SIMULATED`.**
+
+---
+
+# Conclusion
+
+RazorShield AI demonstrates how a modern payment-risk platform can combine machine intelligence, behavioural analysis, deterministic policy, investigation workflows, human review, secure access control, and auditability into a single operational system.
+
+The core architecture is built around a simple principle:
+
+```text
+Detect → Understand → Decide → Investigate → Act → Audit
 ```
 
-## Running the frontend
+Rather than treating fraud detection as a single prediction problem, RazorShield AI approaches it as an end-to-end operational intelligence problem.
 
-From `frontend/`:
+The result is a platform designed to make suspicious payment activity:
 
-```bash
-npm run dev
+```text
+Visible
+Explainable
+Actionable
+Auditable
 ```
 
-Then open http://localhost:5173/dashboard
+---
 
-| Script              | Purpose                         |
-| ------------------- | ------------------------------- |
-| `npm run dev`       | Vite dev server on port 5173    |
-| `npm run build`     | Type-check and build to `dist/` |
-| `npm run preview`   | Serve the production build      |
-| `npm run lint`      | oxlint                          |
-| `npm run typecheck` | TypeScript project build        |
-| `npm test`          | Vitest run                      |
+# Built With
 
-## Running with Docker
-
-```bash
-docker compose up --build
+```text
+Python
+FastAPI
+SQLAlchemy
+Alembic
+PostgreSQL
+React
+Docker
+Docker Compose
+JWT Authentication
+Role-Based Access Control
+Risk & Anomaly Intelligence
 ```
 
-| Service    | URL                   |
-| ---------- | --------------------- |
-| Frontend   | http://localhost:3000 |
-| Backend    | http://localhost:8000 |
-| PostgreSQL | `127.0.0.1:5432`      |
+---
 
-The backend container applies Alembic migrations before starting and waits for the postgres health
-check to pass. Stop with `docker compose down`, adding `-v` to also drop the database volume.
+# Author
 
-All three services run unprivileged with `no-new-privileges` and every Linux capability dropped;
-the frontend additionally runs on a read-only filesystem. PostgreSQL's port is published to
-`127.0.0.1` only. See [docs/security.md](docs/security.md) for the full posture.
+**Kartik Patel**
 
-### Creating a console account
+Computer Science & Engineering
 
-The console requires a sign-in, and the seed generator deliberately writes no credentials, so the
-first account is created explicitly:
+Vellore Institute of Technology
 
-```bash
-docker compose exec -e RAZORSHIELD_PASSWORD=choose-a-strong-password backend python scripts/manage_users.py create --email ops@example.com --role admin
+---
+
+## Final Architecture at a Glance
+
+```text
+                         RAZORSHIELD AI
+                    REAL-TIME RISK INTELLIGENCE
+                              │
+                              ▼
+                    ┌──────────────────┐
+                    │ Transaction      │
+                    │ Intake           │
+                    └────────┬─────────┘
+                             │
+              ┌──────────────┴──────────────┐
+              ▼                             ▼
+     ┌─────────────────┐          ┌─────────────────┐
+     │ Fraud Risk      │          │ Behavioural     │
+     │ Model           │          │ Anomaly Engine  │
+     └────────┬────────┘          └────────┬────────┘
+              │                            │
+              └──────────────┬─────────────┘
+                             ▼
+                    ┌──────────────────┐
+                    │ Investigation    │
+                    │ & Evidence       │
+                    └────────┬─────────┘
+                             │
+                             ▼
+                    ┌──────────────────┐
+                    │ Policy Engine    │
+                    └────────┬─────────┘
+                             │
+             ┌───────────────┼───────────────┐
+             ▼               ▼               ▼
+         APPROVE          STEP-UP          REVIEW
+                                             │
+                                             ▼
+                                           BLOCK
+                                             │
+                                             ▼
+                                  ┌──────────────────┐
+                                  │ PostgreSQL       │
+                                  │ Persistence      │
+                                  └────────┬─────────┘
+                                           │
+                                           ▼
+                                  ┌──────────────────┐
+                                  │ Audit Trail      │
+                                  └──────────────────┘
 ```
-
-Roles are `admin`, `risk_analyst` (the analyst role), `viewer` and `merchant`. `manage_users.py`
-also supports `list`, `set-password` and `deactivate`. The password is never passed as a command
-argument - it comes from `RAZORSHIELD_PASSWORD` or an interactive prompt.
-
-### Health and metrics
-
-| Endpoint | Auth | Purpose |
-| --- | --- | --- |
-| `GET /health/live` | none | Process liveness. Touches no dependency, by design |
-| `GET /health/ready` | none | Database, both models and the policy config; 503 when any is down |
-| `GET /api/metrics` | admin | Prometheus text exposition |
-
-To seed the dataset and train the model inside the running stack:
-
-```bash
-docker compose exec backend python scripts/seed_data.py
-```
-
-```bash
-docker compose exec -w /srv backend python -m ml.training.build_dataset
-```
-
-```bash
-docker compose exec -w /srv backend python -m ml.training.train
-```
-
-The image ships whatever model artifact exists in `ml/models/` at build time. Without one the risk
-endpoint returns 503 until a model is trained.

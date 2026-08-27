@@ -94,6 +94,16 @@ def test_a_merchant_holds_no_console_permission() -> None:
 PUBLIC_ROUTES = {
     # The only way to obtain a credential.
     "/api/auth/login",
+    # Self-service registration. Always creates a VIEWER - see
+    # `test_public_signup_cannot_create_a_privileged_account`.
+    "/api/auth/signup",
+    # The password rules the signup form advertises. Public because the form
+    # that needs them is.
+    "/api/auth/password-policy",
+    # Account recovery. Both answer identically for an address that does not
+    # exist, so neither can be used to find out whether one does.
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
 }
 
 #: Endpoints that authenticate but hold no permission requirement, and why.

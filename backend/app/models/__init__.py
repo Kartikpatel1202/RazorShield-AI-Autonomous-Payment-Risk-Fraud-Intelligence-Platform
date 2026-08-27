@@ -14,6 +14,7 @@ from app.models.feedback import AnalystFeedback, ModelFeedback
 from app.models.investigation import Investigation
 from app.models.ip_address import IpAddress
 from app.models.merchant import Merchant
+from app.models.password_reset import PasswordResetToken
 from app.models.review import AnalystDecision, ReviewCase
 from app.models.risk import RiskPrediction, RiskSignal
 from app.models.rule import RiskRule
@@ -32,6 +33,7 @@ __all__ = [
     "IpAddress",
     "Merchant",
     "ModelFeedback",
+    "PasswordResetToken",
     "ReviewCase",
     "RiskDecision",
     "RiskEvent",

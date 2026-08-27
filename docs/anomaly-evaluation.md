@@ -4,7 +4,7 @@
 by `python -m ml.anomaly.report` on 2026-08-22 16:55 UTC. Every figure
 comes from a real run; none is typed by hand.*
 
-> RazorShield AI is a hackathon simulation. The dataset is synthetic with
+> RazorShield AI is a Real-Time Risk Intelligence. The dataset is synthetic with
 > deliberately learnable structure, so these numbers measure the pipeline, not
 > real-world anomaly detection performance.
 

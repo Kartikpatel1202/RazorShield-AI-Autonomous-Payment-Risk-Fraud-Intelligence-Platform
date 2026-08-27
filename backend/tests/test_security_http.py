@@ -94,6 +94,7 @@ def test_the_docs_are_withheld_in_production() -> None:
     production = Settings(
         environment="production",
         jwt_secret="a" * 48,
+        auth_expose_dev_reset_token=False,
         database_url="sqlite://",
     )
     assert not production.docs_enabled

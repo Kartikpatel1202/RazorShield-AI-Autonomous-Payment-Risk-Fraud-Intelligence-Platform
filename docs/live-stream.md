@@ -7,7 +7,7 @@ existing risk pipeline, and streams every stage to the browser as it happens.
 4, 5 and 6 services the batch path calls. If this layer ever disagreed with the
 batch path about a transaction, that would be a bug in this layer.
 
-> RazorShield AI is a hackathon simulation. The dataset is synthetic, every
+> RazorShield AI is a Real-Time Risk Intelligence. The dataset is synthetic, every
 > simulator-generated transaction is prefixed `SIM_`, and no real Razorpay
 > infrastructure or transaction data is involved.
 

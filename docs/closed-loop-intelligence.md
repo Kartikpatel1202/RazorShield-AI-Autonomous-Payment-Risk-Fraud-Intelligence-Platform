@@ -8,7 +8,7 @@ system is succeeding and where it is failing.
 threshold moved, no policy edited, no decision revised. Every output is
 analytical, and the code contains no path that could do otherwise.
 
-> RazorShield AI is a hackathon simulation. The dataset is synthetic and no real
+> RazorShield AI is a Real-Time Risk Intelligence. The dataset is synthetic and no real
 > Razorpay infrastructure or transaction data is involved.
 
 ## 1. The architecture, end to end

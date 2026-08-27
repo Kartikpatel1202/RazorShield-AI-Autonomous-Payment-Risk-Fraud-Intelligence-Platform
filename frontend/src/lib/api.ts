@@ -155,6 +155,38 @@ export interface SessionResponse {
   permissions: string[]
 }
 
+export interface SignupResponse {
+  status: string
+  detail: string
+  user: LoginResponse['user']
+}
+
+export interface ForgotPasswordResponse {
+  status: string
+  detail: string
+  /**
+   * Local development only.
+   *
+   * The backend has no SMTP integration, so with `AUTH_EXPOSE_DEV_RESET_TOKEN`
+   * on it returns the reset link here instead of emailing it. The configuration
+   * refuses that flag in production, so this is always null there - the console
+   * shows the link when it is present and says nothing about it when it is not.
+   */
+  dev_reset_url: string | null
+  dev_expires_at: string | null
+}
+
+export interface ResetPasswordResponse {
+  status: string
+  detail: string
+}
+
+export interface PasswordPolicy {
+  min_length: number
+  max_bytes: number
+  guidance: string[]
+}
+
 // --------------------------------------------------------------------------
 // Shared shapes
 // --------------------------------------------------------------------------
@@ -828,6 +860,24 @@ export const api = {
     apiPost<LoginResponse>('/api/auth/login', { email, password }, { anonymous: true }),
   session: (signal?: AbortSignal) => apiGet<SessionResponse>('/api/auth/me', undefined, signal),
   logout: () => apiPost<{ status: string; detail: string }>('/api/auth/logout', {}),
+
+  // Every call below is `anonymous`: they are reached before a session exists,
+  // and their 4xx responses mean "that address is taken" or "that link is
+  // spent", never "your session expired". Routing them through the normal path
+  // would fire the unauthorized listeners and bounce the user off the form they
+  // are standing on.
+  signup: (body: { full_name: string; email: string; password: string }) =>
+    apiPost<SignupResponse>('/api/auth/signup', body, { anonymous: true }),
+  forgotPassword: (email: string) =>
+    apiPost<ForgotPasswordResponse>('/api/auth/forgot-password', { email }, { anonymous: true }),
+  resetPassword: (token: string, password: string) =>
+    apiPost<ResetPasswordResponse>(
+      '/api/auth/reset-password',
+      { token, password },
+      { anonymous: true },
+    ),
+  passwordPolicy: (signal?: AbortSignal) =>
+    apiGet<PasswordPolicy>('/api/auth/password-policy', undefined, signal),
 
   overview: (signal?: AbortSignal) => apiGet<Overview>('/api/analytics/overview', undefined, signal),
   riskDistribution: (signal?: AbortSignal) =>
