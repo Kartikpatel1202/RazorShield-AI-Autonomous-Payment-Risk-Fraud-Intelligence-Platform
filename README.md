@@ -204,19 +204,9 @@ This allows the system to identify suspicious behaviour even when the fraud mode
 
 Every important decision can be traced through:
 
-```text
-Transaction
-      ↓
-Fraud Model
-      ↓
-Anomaly Engine
-      ↓
-Investigation
-      ↓
-Policy Rules
-      ↓
-Decision
-```
+<p align="center">
+  <img src="docs/explainabledecision.png" alt="Explainable Decision" width="100%">
+</p>
 
 The platform exposes reason codes and matched policy rules to improve explainability.
 
@@ -236,21 +226,9 @@ High-impact transactions can be routed to analysts instead of being automaticall
 
 This creates a safer decision architecture:
 
-```text
-Risk detected
-     ↓
-Policy evaluation
-     ↓
-Human review required
-     ↓
-Investigator
-     ↓
-Analyst decision
-     ↓
-Audit trail
-```
-
----
+<p align="center">
+  <img src="docs/humaninloop.png" alt="Human in Loop" width="100%">
+</p>
 
 ## Role-Based Access Control
 
@@ -330,7 +308,7 @@ The complete processing architecture can be represented as:
 <p align="center">
   <img src="docs/riskpipeline.png" alt="Risk Pipeline" width="100%">
 </p>
----
+
 
 # 🏗️ System Architecture
 
@@ -526,7 +504,6 @@ Audit → records
 
 This makes the system more deterministic and explainable.
 
----
 
 # Live Risk Stream
 
@@ -549,15 +526,9 @@ It also provides a live transaction feed.
 
 Example:
 
-```text
-Transaction       SIM_b57ece52_000010
-Amount            ₹20,900.00
-Fraud Probability 1.48%
-Anomaly           100
-Severity          CRITICAL
-Investigation     HIGH
-Decision          REVIEW
-```
+<p align="center">
+  <img src="docs/transactionanalysis.png" alt="Transaction Analysis" width="100%">
+</p>
 
 The stream is backed by the application's controlled transaction-generation and processing pipeline.
 
@@ -632,23 +603,13 @@ Authentication is handled by the backend.
 
 The application supports:
 
-```text
-Sign In
-   ↓
-Credential Validation
-   ↓
-Authenticated Session
-   ↓
-Role Resolution
-   ↓
-Permission Enforcement
-   ↓
-Console Access
-```
+<p align="center">
+  <img src="docs/authentication.png" alt="Authentication" width="100%">
+</p>
 
 Passwords are handled through secure password hashing rather than storing plaintext credentials.
 
----
+
 
 # Audit & Explainability
 
@@ -784,20 +745,9 @@ Authenticated requests can be associated with a signed token containing the requ
 Access to sensitive operations is controlled by user roles and permissions.
 
 For example:
-
-```text
-Viewer
-   ↓
-Read-only operations
-
-Risk Analyst
-   ↓
-Investigation / Review
-
-Admin
-   ↓
-Administrative operations
-```
+<p align="center">
+  <img src="docs/rolebasedauthorization.png" alt="Role based authorization" width="100%">
+</p>
 
 ---
 
@@ -1323,35 +1273,16 @@ Admin → Administrative operations allowed
 
 ### Transaction Processing
 
-```text
-Input transaction
-       ↓
-Risk evaluation
-       ↓
-Anomaly evaluation
-       ↓
-Policy evaluation
-       ↓
-Decision
-       ↓
-Persistence
-```
+<p align="center">
+  <img src="docs/transaction.png" alt="Transaction" width="100%">
+</p>
 
 ### Simulator
 
-```text
-Start simulator
-      ↓
-Generate transactions
-      ↓
-Process transactions
-      ↓
-Observe live feed
-      ↓
-Verify persisted records
-```
+<p align="center">
+  <img src="docs/simulator.png" alt="simulator" width="100%">
+</p>
 
----
 
 # Production Hardening
 
@@ -1551,21 +1482,9 @@ Graph analysis could identify coordinated fraud rings and hidden relationships.
 
 A future AI risk agent could assist analysts by:
 
-```text
-Suspicious Transaction
-        ↓
-Agent retrieves evidence
-        ↓
-Agent analyzes behaviour
-        ↓
-Agent checks related entities
-        ↓
-Agent summarizes findings
-        ↓
-Agent recommends action
-        ↓
-Human approves / rejects
-```
+<p align="center">
+  <img src="docs/agentrisk.png" alt="Agent Risk Investigation" width="100%">
+</p>
 
 The human remains in control of high-impact actions.
 
@@ -1577,23 +1496,9 @@ The system could eventually evaluate policy changes through controlled experimen
 
 For example:
 
-```text
-Policy A
-   ↓
-Current fraud detection
-
-Policy B
-   ↓
-New threshold / model
-
-        ↓
-
-Compare:
-False Positives
-Fraud Capture
-Review Volume
-Customer Friction
-```
+<p align="center">
+  <img src="docs/automated.png" alt="Automated Experimentation" width="100%">
+</p>
 
 ---
 
@@ -1603,21 +1508,9 @@ RazorShield AI is designed around a broader concept than simple fraud detection.
 
 The platform connects:
 
-```text
-Detection
-    +
-Explainability
-    +
-Policy
-    +
-Investigation
-    +
-Human Review
-    +
-Auditability
-    +
-Security
-```
+<p align="center">
+  <img src="docs/razorshieldai.png" alt="Razorshield AI" width="100%">
+</p>
 
 This creates a complete risk-operations workflow.
 
@@ -1757,82 +1650,16 @@ This separation makes the demonstration architecture closer to a real risk-proce
 
 # Data Flow Summary
 
-```text
-┌──────────────────────┐
-│ Transaction Source   │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│ Transaction Intake   │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│ Fraud Risk Model     │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│ Anomaly Detection    │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│ Investigation Engine │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│ Policy Engine        │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│ Decision             │
-│                      │
-│ APPROVE              │
-│ STEP-UP              │
-│ REVIEW               │
-│ BLOCK                │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│ PostgreSQL           │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│ Audit Trail          │
-└──────────────────────┘
-```
+<p align="center">
+  <img src="docs/dataflow.png" alt="DataFlow Summary" width="100%">
+</p>
 
----
 
 # Example Operational Lifecycle
 
-```text
-1. Transaction arrives
-          ↓
-2. Risk model evaluates transaction
-          ↓
-3. Behaviour engine checks anomaly
-          ↓
-4. Investigation collects evidence
-          ↓
-5. Policy engine evaluates risk
-          ↓
-6. Decision is generated
-          ↓
-7. High-risk transaction may enter review
-          ↓
-8. Analyst investigates
-          ↓
-9. Action is recorded
-          ↓
-10. Audit trail preserves the operation
-```
+<p align="center">
+  <img src="docs/operationallifecycle.png" alt="Operational Lifecycle" width="100%">
+</p>
 
 ---
 
