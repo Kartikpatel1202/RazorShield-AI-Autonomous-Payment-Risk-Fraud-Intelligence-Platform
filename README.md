@@ -1299,7 +1299,7 @@ A future production architecture could look like:
 <p align="center">
   <img src="docs/Productionsection.png" alt="Production scale Architecture" width="100%">
 </p>
----
+
 
 # Project Phases
 
