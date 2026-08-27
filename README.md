@@ -61,28 +61,9 @@ Fraud = TRUE
 is not sufficient for a modern risk operations team.
 
 RazorShield AI is designed around a complete decision lifecycle:
-
-```text
-Transaction
-    ↓
-Risk Evaluation
-    ↓
-Fraud Probability
-    ↓
-Behavioural Anomaly Detection
-    ↓
-Policy Evaluation
-    ↓
-Risk Classification
-    ↓
-Decision
-    ↓
-Investigation / Review
-    ↓
-Analyst Action
-    ↓
-Immutable Audit Trail
-```
+<p align="center">
+  <img src="docs/decisionlifecycle.png" alt="Decision Lifecycle" width="100%">
+</p>
 
 The objective is not only to identify risky payments, but also to answer:
 
