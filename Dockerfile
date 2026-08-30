@@ -9,7 +9,9 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 COPY backend /app/backend
 COPY database /app/database
 COPY ml /app/ml
+COPY agent /app/agent
 COPY policy /app/policy
+COPY config /app/config
 
 ENV PYTHONPATH=/app
 
