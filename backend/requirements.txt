@@ -5,6 +5,9 @@ pydantic==2.10.5
 pydantic-settings==2.7.1
 SQLAlchemy==2.0.36
 alembic==1.14.1
+# The deterministic policy is a YAML file, so this is a first-class runtime
+# dependency and not something to keep inheriting from uvicorn[standard].
+PyYAML==6.0.2
 psycopg[binary]==3.2.3
 
 # --- ML risk engine (Phase 3) ---------------------------------------------

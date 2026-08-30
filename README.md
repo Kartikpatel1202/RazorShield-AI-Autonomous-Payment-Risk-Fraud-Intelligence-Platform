@@ -1007,6 +1007,12 @@ Set or replace a password:
 python scripts/manage_users.py set-password --email <EMAIL>
 ```
 
+Change an existing account's role:
+
+```bash
+python scripts/manage_users.py set-role --email <EMAIL> --role admin
+```
+
 Deactivate an account:
 
 ```bash
@@ -1014,6 +1020,68 @@ python scripts/manage_users.py deactivate
 ```
 
 > Always use the project's configured environment variables and database before executing administrative commands.
+
+### Why signup cannot produce an operator
+
+`POST /api/auth/signup` always creates a **viewer**, and the request schema has
+no role field. That is deliberate, not a bug: an HTTP endpoint that can create
+an administrator has to be reachable by someone who is not one yet.
+
+A viewer holds `dashboard:read`, `transactions:read`, `monitoring:read`,
+`audit:read`, `investigations:read`, `reviews:read` and `events:read`. It does
+not hold `simulator:control`, which is why the Live page tells a freshly
+signed-up account that it may observe the stream but not start it. Elevate the
+account with `set-role` above, or create the operator during deployment with the
+bootstrap described below.
+
+---
+
+# Deployment Bootstrap
+
+A fresh deployment has a complete schema and no rows. Migrations create tables;
+nothing creates data, model outputs or an account that can sign in. Until that
+happens the dashboard correctly reports zero for everything, and the simulator
+refuses to start because there is no merchant to attribute simulated payments
+to.
+
+`backend/scripts/bootstrap.py` runs the whole chain in order:
+
+| # | Stage | What it produces | Skipped when |
+|---|-------|------------------|--------------|
+| 1 | schema | `alembic upgrade head` | never (a no-op once applied) |
+| 2 | dataset | merchants, customers, devices, IPs, transactions | `transactions` is non-empty |
+| 3 | predictions | Phase 3 supervised fraud probabilities | `risk_predictions` is non-empty |
+| 4 | signals | Phase 4 behavioural anomaly scores | `risk_signals` is non-empty |
+| 5 | decisions | Phase 6 policy decisions, review cases, audit rows | `risk_decisions` is non-empty |
+| 6 | accounts | the operator and viewer accounts | credentials absent from the environment |
+
+Every stage is skipped when its output already exists, so re-running it creates
+no duplicate row and rewrites no history. The seed generator's table reset — the
+one destructive operation in the codebase — is reached only when `transactions`
+is empty, so a redeploy never clears a populated database.
+
+Report what is present without changing anything:
+
+```bash
+python scripts/bootstrap.py --status
+```
+
+Run it:
+
+```bash
+python scripts/bootstrap.py
+```
+
+Set `BOOTSTRAP_ON_START=true` to have the container entrypoint run it on every
+deploy. It runs in the **background** and the API binds its port immediately: a
+multi-minute seed ahead of the port bind would be read by the hosting platform
+as a failed deploy and retried. A bootstrap failure is logged and never stops
+the API.
+
+`risk_rules` stays empty, and that is correct. The deterministic policy lives in
+`config/policies/default.yaml` and `policy/rules.py`; the table is schema
+provided for per-merchant overrides and is read by nothing in the pipeline. Its
+row count is not a symptom of anything.
 
 ---
 

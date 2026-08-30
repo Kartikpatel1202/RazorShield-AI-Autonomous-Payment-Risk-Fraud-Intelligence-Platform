@@ -86,6 +86,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
+        # Exact origins cover the known deployments; the regex covers a preview
+        # platform that mints a fresh hostname per build. Both are scoped in
+        # configuration - neither is a wildcard, which `Settings` refuses.
+        allow_origin_regex=settings.cors_origin_regex,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

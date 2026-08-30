@@ -92,7 +92,7 @@ describe('App', () => {
       screen.getAllByText((_, element) => element?.textContent === 'RazorShield AI').length,
     ).toBeGreaterThan(0)
     expect(
-      screen.getByText(/not real Razorpay infrastructure or transaction data/i),
+      screen.getByText(/Demonstration Environment . No production transaction data/i),
     ).toBeInTheDocument()
   })
 

@@ -238,7 +238,11 @@ def _default_merchant(session: Session) -> str:
     if merchant is None:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No merchant exists to attribute simulated transactions to. Seed the dataset.",
+            detail=(
+                "No merchant exists to attribute simulated transactions to. "
+                "The database has not been bootstrapped: run "
+                "`python scripts/bootstrap.py`, or deploy with BOOTSTRAP_ON_START=true."
+            ),
         )
     return merchant.external_merchant_id
 

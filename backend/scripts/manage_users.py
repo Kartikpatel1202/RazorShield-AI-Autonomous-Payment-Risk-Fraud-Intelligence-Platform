@@ -5,6 +5,7 @@ Run from the ``backend/`` directory::
     python scripts/manage_users.py list
     python scripts/manage_users.py create --email ops@example.com --role admin
     python scripts/manage_users.py set-password --email ops@example.com
+    python scripts/manage_users.py set-role --email ops@example.com --role admin
     python scripts/manage_users.py deactivate --email ops@example.com
 
 WHY A SCRIPT AND NOT AN ENDPOINT
@@ -137,6 +138,36 @@ def cmd_set_password(session: Session, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_set_role(session: Session, args: argparse.Namespace) -> int:
+    """Change an existing account's role.
+
+    The gap this fills: ``POST /api/auth/signup`` always produces a ``viewer``
+    and deliberately has no role field, so the only way an account created
+    through the console could ever hold ``simulator:control`` was to be created
+    here in the first place. Someone who has already signed up had no path at
+    all - the operator's only option was to delete the row by hand, which is
+    exactly the manual database editing this project is meant not to require.
+
+    Takes effect on the account's next request, not on their next login: the
+    role in an already-issued token is never trusted, because ``deps`` re-reads
+    the user row and ``permissions_for`` is applied to what the database says.
+    """
+    user = find_user_by_email(session, args.email)
+    if user is None:
+        raise SystemExit(f"No account for {args.email}.")
+
+    previous = user.role
+    target = UserRole(args.role)
+    if previous == target:
+        print(f"{user.email} already has role {target}. Nothing to do.")
+        return 0
+
+    user.role = target
+    session.commit()
+    print(f"{user.email}: {previous} -> {target}. Effective on their next request.")
+    return 0
+
+
 def cmd_deactivate(session: Session, args: argparse.Namespace) -> int:
     """Disable an account.
 
@@ -172,6 +203,15 @@ def build_parser() -> argparse.ArgumentParser:
     reset = sub.add_parser("set-password", help="Set or replace an account's password")
     reset.add_argument("--email", required=True)
 
+    role = sub.add_parser("set-role", help="Change an existing account's role")
+    role.add_argument("--email", required=True)
+    role.add_argument(
+        "--role",
+        required=True,
+        choices=[value.value for value in UserRole],
+        help="admin, risk_analyst (the analyst role), viewer, or merchant",
+    )
+
     disable = sub.add_parser("deactivate", help="Disable an account immediately")
     disable.add_argument("--email", required=True)
 
@@ -184,6 +224,7 @@ def main(argv: list[str] | None = None) -> int:
         "list": cmd_list,
         "create": cmd_create,
         "set-password": cmd_set_password,
+        "set-role": cmd_set_role,
         "deactivate": cmd_deactivate,
     }
     with SessionLocal() as session:

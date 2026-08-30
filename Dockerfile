@@ -1,4 +1,4 @@
-﻿FROM python:3.11-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -14,7 +14,12 @@ COPY policy /app/policy
 COPY config /app/config
 
 ENV PYTHONPATH=/app
+# Unbuffered so the bootstrap's progress reaches the platform log as it happens
+# rather than in one block when the process exits.
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app/backend
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
+RUN chmod +x /app/backend/docker-entrypoint.sh
+
+CMD ["/app/backend/docker-entrypoint.sh"]

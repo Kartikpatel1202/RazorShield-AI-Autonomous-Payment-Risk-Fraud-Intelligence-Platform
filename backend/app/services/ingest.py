@@ -21,14 +21,14 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -56,6 +56,9 @@ from policy.loader import get_policy
 from policy.rules import investigation_warranted
 
 logger = logging.getLogger(__name__)
+
+#: Any ORM entity `_first_seen` can get-or-create.
+_Entity = TypeVar("_Entity")
 
 #: Prefix marking a transaction as simulator-generated. Chosen over a schema
 #: column so a 20,000-row table needs no migration, and so the marking is
@@ -168,6 +171,47 @@ def _stage(name: str, result: IngestResult) -> Iterator[None]:
 # --------------------------------------------------------------------------
 # Entity resolution
 # --------------------------------------------------------------------------
+def _first_seen(session: Session, statement: Select[Any], build: Callable[[], _Entity]) -> _Entity:
+    """Get-or-create an entity that several pipeline workers may first-see at once.
+
+    The obvious shape - SELECT, and INSERT when it misses - is a race, and the
+    simulator is built to lose it. Three workers process the queue concurrently,
+    each on its own ``Session``, and a scenario deliberately reuses one customer
+    across a burst of transactions. The burst's first few events therefore run
+    the miss-then-insert path simultaneously for the same identifier, and
+    PostgreSQL enforces the unique constraint against the row the other worker
+    has not yet committed. One worker wins; the rest raise ``IntegrityError``
+    and lose their transaction to the pipeline's failure path.
+
+    That is not a hypothetical. It cost two of every twelve simulated
+    transactions - concentrated in the opening seconds of a run, which is
+    exactly when someone is watching the live feed.
+
+    The insert therefore runs inside a SAVEPOINT. A constraint violation rolls
+    back only that savepoint, leaving the surrounding transaction usable, and
+    the row the winner committed is then visible to a second SELECT. If that
+    still finds nothing the violation was some other constraint, and it is
+    re-raised rather than swallowed.
+    """
+    existing = session.scalar(statement)
+    if existing is not None:
+        return existing
+
+    try:
+        with session.begin_nested():
+            entity = build()
+            session.add(entity)
+            session.flush()
+        return entity
+    except IntegrityError:
+        # The savepoint is already rolled back; the session is usable again.
+        winner = session.scalar(statement)
+        if winner is None:
+            raise
+        logger.debug("Lost a first-seen race; using the row the other worker created")
+        return winner
+
+
 def _resolve_merchant(session: Session, external_id: str) -> Merchant:
     merchant = session.scalar(select(Merchant).where(Merchant.external_merchant_id == external_id))
     if merchant is None:
@@ -183,21 +227,18 @@ def _resolve_customer(session: Session, external_id: str, merchant: Merchant) ->
     -time feature layer handles a customer with no history exactly as it handles
     any new account.
     """
-    customer = session.scalar(select(Customer).where(Customer.external_customer_id == external_id))
-    if customer is not None:
-        return customer
-
-    customer = Customer(
-        merchant_id=merchant.id,
-        external_customer_id=external_id,
-        email=f"{external_id.lower()}@simulated.invalid",
-        account_created_at=datetime.now(UTC),
-        country="IN",
-        city="Mumbai",
+    return _first_seen(
+        session,
+        select(Customer).where(Customer.external_customer_id == external_id),
+        lambda: Customer(
+            merchant_id=merchant.id,
+            external_customer_id=external_id,
+            email=f"{external_id.lower()}@simulated.invalid",
+            account_created_at=datetime.now(UTC),
+            country="IN",
+            city="Mumbai",
+        ),
     )
-    session.add(customer)
-    session.flush()
-    return customer
 
 
 def _resolve_device(
@@ -205,22 +246,20 @@ def _resolve_device(
 ) -> Device | None:
     if not fingerprint:
         return None
-    device = session.scalar(select(Device).where(Device.device_id == fingerprint))
-    if device is not None:
-        # Keep last_seen_at current; the behavioural features read it.
-        if device.last_seen_at < seen_at:
-            device.last_seen_at = seen_at
-        return device
-
-    device = Device(
-        device_id=fingerprint,
-        device_type=device_type or DeviceType.WEB_DESKTOP,
-        first_seen_at=seen_at,
-        last_seen_at=seen_at,
-        is_trusted=False,
+    device = _first_seen(
+        session,
+        select(Device).where(Device.device_id == fingerprint),
+        lambda: Device(
+            device_id=fingerprint,
+            device_type=device_type or DeviceType.WEB_DESKTOP,
+            first_seen_at=seen_at,
+            last_seen_at=seen_at,
+            is_trusted=False,
+        ),
     )
-    session.add(device)
-    session.flush()
+    # Keep last_seen_at current; the behavioural features read it.
+    if device.last_seen_at < seen_at:
+        device.last_seen_at = seen_at
     return device
 
 
@@ -235,26 +274,24 @@ def _resolve_ip(
 ) -> IpAddress | None:
     if not address:
         return None
-    record = session.scalar(select(IpAddress).where(IpAddress.ip_address == address))
-    if record is not None:
-        if record.last_seen_at < seen_at:
-            record.last_seen_at = seen_at
-        return record
-
-    record = IpAddress(
-        ip_address=address,
-        country=country,
-        city=city,
-        first_seen_at=seen_at,
-        last_seen_at=seen_at,
-        # A proxy is given a poor reputation because that is what the Phase 5
-        # IP tool reads. The value is a simulated property of the address, not
-        # a risk judgement about the transaction.
-        reputation_score=Decimal("11.50") if is_proxy else Decimal("80.00"),
-        is_proxy=is_proxy,
+    record = _first_seen(
+        session,
+        select(IpAddress).where(IpAddress.ip_address == address),
+        lambda: IpAddress(
+            ip_address=address,
+            country=country,
+            city=city,
+            first_seen_at=seen_at,
+            last_seen_at=seen_at,
+            # A proxy is given a poor reputation because that is what the Phase
+            # 5 IP tool reads. The value is a simulated property of the address,
+            # not a risk judgement about the transaction.
+            reputation_score=Decimal("11.50") if is_proxy else Decimal("80.00"),
+            is_proxy=is_proxy,
+        ),
     )
-    session.add(record)
-    session.flush()
+    if record.last_seen_at < seen_at:
+        record.last_seen_at = seen_at
     return record
 
 

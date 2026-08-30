@@ -6,6 +6,7 @@ local ``.env`` file). No secret is ever hardcoded in this module.
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from typing import Literal
 
@@ -123,7 +124,25 @@ class Settings(BaseSettings):
     # --- HTTP -------------------------------------------------------------
     # Comma-separated list of allowed browser origins.
     cors_origins: str = "http://localhost:5173"
+    #: Regular expression matching additional allowed origins, anchored on both
+    #: ends by Starlette. This exists for one specific deployment shape: a
+    #: preview platform that mints a NEW hostname for every build. Vercel does
+    #: exactly that, so an exact-origin list would have to be edited - and the
+    #: API redeployed - on every preview, and the alternative people reach for
+    #: is ``allow_origins=["*"]``, which this codebase refuses to do.
+    #:
+    #: Scope it to your own project, never to a whole platform. A pattern like
+    #: ``^https://[a-z0-9-]+\.vercel\.app$`` trusts every account on Vercel.
+    cors_origin_regex: str | None = None
     api_prefix: str = "/api"
+
+    @field_validator("cors_origin_regex", mode="before")
+    @classmethod
+    def _blank_regex_is_unset(cls, value: object) -> object:
+        """Treat an empty ``CORS_ORIGIN_REGEX=`` entry as "not configured"."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator("llm_api_key", mode="before")
     @classmethod
@@ -162,6 +181,35 @@ class Settings(BaseSettings):
                 "AUTH_EXPOSE_DEV_RESET_TOKEN must be false in production: it returns a "
                 "password-reset capability to anyone who asks for one."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_cors(self) -> Settings:
+        """Refuse a CORS configuration a browser would reject or an attacker would enjoy.
+
+        ``allow_credentials=True`` is set in ``app.main``, and the CORS spec
+        forbids pairing that with ``Access-Control-Allow-Origin: *``: Starlette
+        silently drops the wildcard instead, so the deployment appears
+        configured and every browser request still fails. Better to say so at
+        startup than to leave someone reading a preflight log.
+
+        The regex is compiled here for the same reason - an invalid pattern
+        otherwise surfaces as "no origin ever matches", which looks exactly like
+        a missing entry.
+        """
+        if "*" in self.cors_origin_list:
+            raise ValueError(
+                "CORS_ORIGINS may not contain '*': this API sends credentials, and the "
+                "wildcard is invalid in that combination. List the exact frontend "
+                "origins, or use CORS_ORIGIN_REGEX for preview deployments."
+            )
+        if self.cors_origin_regex is not None:
+            try:
+                re.compile(self.cors_origin_regex)
+            except re.error as exc:
+                raise ValueError(
+                    f"CORS_ORIGIN_REGEX is not a valid regular expression: {exc}"
+                ) from exc
         return self
 
     @property

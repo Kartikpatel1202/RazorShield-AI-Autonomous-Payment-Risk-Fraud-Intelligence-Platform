@@ -1,0 +1,24 @@
+# Line endings.
+#
+# The repository is developed on Windows (`core.autocrlf=true`) and built into a
+# Linux container. That combination has one classic failure: a shell script
+# committed with CRLF is checked out inside the image with CRLF, and the kernel
+# then reads the shebang as `/bin/sh\r` and reports
+#
+#     exec /app/backend/docker-entrypoint.sh: no such file or directory
+#
+# which names a file that is plainly present. Pinning the entrypoint - and
+# anything else the container executes or parses - to LF removes the dependency
+# on whatever `core.autocrlf` happens to be set to on the machine that commits.
+
+* text=auto
+
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+
+# Model artifacts and other binaries must never be line-ending converted.
+*.joblib binary
+*.png binary
+*.ico binary
