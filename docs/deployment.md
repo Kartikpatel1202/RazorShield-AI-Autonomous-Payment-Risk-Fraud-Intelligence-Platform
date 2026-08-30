@@ -37,13 +37,26 @@ convert it to the SQLAlchemy form the backend expects:
 postgresql+psycopg://postgres.PROJECT_REF:PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres
 ```
 
-Two details that are easy to get wrong:
+Three details that are easy to get wrong:
 
 - The scheme must be `postgresql+psycopg://`. A bare `postgresql://` selects a
   driver that is not installed.
 - Prefer the pooler over the direct connection. Render's free instance sleeps
   and wakes, and each wake opens a fresh pool against a database with a
   connection ceiling.
+- **Use the pooler's session mode (port `5432`), not transaction mode (port
+  `6543`).** psycopg3 promotes a statement to a server-side prepared statement
+  once it has seen it a few times, and transaction-mode pooling hands the next
+  execution to a different backend that has never heard of it. The failure is
+  delayed and confusing — normal browsing works, and then the bootstrap, which
+  runs the same queries thousands of times, fails partway through with
+  `prepared statement "_pg3_0" already exists`.
+
+  If you must use port `6543`, disable the behaviour explicitly:
+
+  ```text
+  postgresql+psycopg://...@...pooler.supabase.com:6543/postgres?prepare_threshold=0
+  ```
 
 The backend reaches Supabase over the Postgres wire protocol with this URL.
 **It never uses a Supabase API key**, so there is no `SUPABASE_URL` and no
