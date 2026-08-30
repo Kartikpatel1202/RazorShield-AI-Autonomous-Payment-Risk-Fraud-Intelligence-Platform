@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from agent.config import get_agent_settings
 from app.api.deps import require
+from app.core.config import get_settings
 from app.core.permissions import Permission
 from app.db.session import get_db
 from app.models.enums import ActorType, DecisionAction, TransactionStatus
@@ -323,7 +324,14 @@ def system_health(session: Session = Depends(get_db)) -> SystemHealthResponse:
     availability checks - if a model loads here it loads there.
     """
     components = [
-        ComponentHealth(name="backend", status="ok"),
+        # `version` carries the deployed commit when the platform supplies one.
+        # It answers the question a status page otherwise cannot: whether the
+        # code running here is the code that was last pushed.
+        ComponentHealth(
+            name="backend",
+            status="ok",
+            version=get_settings().build_commit,
+        ),
         _database_health(session),
         _model_health("fraud_model", get_predictor),
         _model_health("anomaly_model", get_anomaly_predictor),

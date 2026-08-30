@@ -235,6 +235,24 @@ curl -s https://razorshield-backend.onrender.com/health/ready
 Expect `ready: true` with `database`, `fraud_model`, `anomaly_model` and
 `policy` all `ok`.
 
+### Which commit is actually running
+
+A service can serve a perfectly healthy `200` from a commit that is weeks
+behind the repository, and nothing in an unauthenticated response says so. Sign
+in and ask:
+
+```bash
+curl -s https://razorshield-backend.onrender.com/api/system/health -H "authorization: Bearer YOUR_TOKEN"
+```
+
+The `backend` component's `version` is the deployed commit, taken from
+`RENDER_GIT_COMMIT`, which Render injects on its own. Compare it against
+`git rev-parse HEAD`. If it lags, the push did not reach the branch Render
+watches, or the deploy failed — check the dashboard rather than the code.
+
+It is deliberately absent from `/health` and `/health/ready`: those exist for an
+orchestrator's probe and reveal nothing to an anonymous caller.
+
 ```bash
 curl -i -X OPTIONS https://razorshield-backend.onrender.com/api/auth/signup -H "Origin: https://YOUR-CONSOLE.vercel.app" -H "Access-Control-Request-Method: POST"
 ```

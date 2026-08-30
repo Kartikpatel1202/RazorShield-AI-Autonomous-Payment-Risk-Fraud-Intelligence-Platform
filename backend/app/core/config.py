@@ -10,7 +10,7 @@ import re
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "development", "staging", "production"]
@@ -53,6 +53,24 @@ class Settings(BaseSettings):
     service_name: str = "razorshield-backend"
     environment: Environment = "local"
     log_level: str = "INFO"
+
+    #: The commit this build was produced from.
+    #:
+    #: Reported by ``GET /api/system/health``, which requires ``dashboard:read``.
+    #: Deliberately not on the unauthenticated ``/health`` endpoints: those exist
+    #: for an orchestrator's probe and answer nothing an anonymous caller could
+    #: not learn by watching whether the service replies at all.
+    #:
+    #: This exists because "is my fix actually deployed?" is otherwise
+    #: unanswerable from outside the platform's dashboard - a service can serve
+    #: a healthy 200 from a commit that is weeks behind the repository, and
+    #: nothing in the response says so. Render injects ``RENDER_GIT_COMMIT``
+    #: into the runtime environment on its own; the other two names are for
+    #: platforms that do not, where the value is passed in explicitly.
+    build_commit: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("RENDER_GIT_COMMIT", "GIT_COMMIT", "BUILD_COMMIT"),
+    )
 
     # --- Database ---------------------------------------------------------
     # SQLAlchemy URL, e.g. postgresql+psycopg://user:pass@host:5432/dbname
@@ -135,6 +153,14 @@ class Settings(BaseSettings):
     #: ``^https://[a-z0-9-]+\.vercel\.app$`` trusts every account on Vercel.
     cors_origin_regex: str | None = None
     api_prefix: str = "/api"
+
+    @field_validator("build_commit", mode="before")
+    @classmethod
+    def _blank_commit_is_unset(cls, value: object) -> object:
+        """An unset ``BUILD_COMMIT=`` is "unknown", not the empty string."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator("cors_origin_regex", mode="before")
     @classmethod
