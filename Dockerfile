@@ -8,6 +8,9 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
 COPY backend /app/backend
 COPY database /app/database
+COPY ml /app/ml
+
+ENV PYTHONPATH=/app
 
 WORKDIR /app/backend
 
