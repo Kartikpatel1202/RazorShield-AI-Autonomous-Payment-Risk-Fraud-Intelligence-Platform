@@ -83,7 +83,7 @@ command: the image's entrypoint handles both.
 | `CORS_ORIGIN_REGEX` | `^https://razor-shield-ai-[a-z0-9-]+\.vercel\.app$` | Vercel mints a new hostname per preview build; scope this to **your** project, never to `*.vercel.app` |
 | `HSTS_ENABLED` | `true` | Render terminates TLS |
 | `BOOTSTRAP_ON_START` | `true` | see below |
-| `BOOTSTRAP_TRANSACTIONS` | `3000` | |
+| `BOOTSTRAP_TRANSACTIONS` | `3000` on a 512 MB instance | the default is 20,000, the same as `scripts/seed_data.py`; see below |
 | `BOOTSTRAP_ADMIN_EMAIL` | your demo operator address | |
 | `BOOTSTRAP_ADMIN_PASSWORD` | 12+ characters, generated | mark as secret |
 
@@ -142,6 +142,22 @@ skipped when its output already exists, so it is safe on every deploy.
 7  accounts        the operator account, from the environment
 ```
 
+### How big is the dataset, and why the environments disagreed
+
+`BOOTSTRAP_TRANSACTIONS` defaults to `SeedConfig.transactions` — 20,000, the same
+number `scripts/seed_data.py` produces. It is read from `SeedConfig` rather than
+restated, because it previously *was* restated: the bootstrap carried its own
+literal 3,000, chosen so a run would finish inside a small host's start-up
+window. The result was two entry points to one generator disagreeing about what
+the dataset is, a local database with 20,000 transactions, a deployment with
+3,000, and nothing in either place saying so.
+
+The full dataset measures about **155 MB** on PostgreSQL, well inside Supabase's
+free 500 MB. Size is not the constraint; time and memory during the run are. On a
+512 MB instance seeding across a network hop, set `BOOTSTRAP_TRANSACTIONS=3000`
+explicitly — a visible decision rather than a silent difference — or seed the
+full dataset from a workstation, where neither limit applies.
+
 Stage 2 matters more than it looks: **the simulator refuses to start when no
 merchant exists**, because a simulated payment has to be attributed to one. An
 empty `merchants` table is why `POST /api/simulator/start` answers 503 on a
@@ -183,6 +199,65 @@ It never reseeds a database that already has transactions. The seed generator's
 first act is to truncate every simulation table — including `users` — so the
 stage is gated on `transactions` being empty. A redeploy cannot clear a
 populated database or delete the accounts people signed up with.
+
+---
+
+## Administering production from a workstation
+
+Neither the bootstrap nor `manage_users.py` has a database of its own. Both
+resolve `DATABASE_URL` exactly as the API does, so pointing that variable at the
+production database runs the same code against production from wherever you are.
+On a host whose shell is a paid feature, this is the administration path.
+
+It is also the sharpest edge in the project. The command you type is identical in
+both environments; only an environment variable decides which database it
+changes. That is precisely how a password gets rotated in the wrong place and the
+change is reported as "not working".
+
+So every **write** through `manage_users.py` against a non-local host now prints
+its target and refuses to proceed without confirmation:
+
+```text
+Target database : postgres.abcdefg@aws-0-ap-south-1.pooler.supabase.com:5432/postgres
+Environment     : production
+This is not a local database. The change will apply there, not to local PostgreSQL.
+Type the host to continue (aws-0-ap-south-1.pooler.supabase.com):
+```
+
+`list` is read-only and is not gated. For a scripted run, pre-approve the exact
+hostname with `RAZORSHIELD_CONFIRM_TARGET`; a value that does not match the
+target is refused rather than assumed.
+
+`set-password` now names the database it wrote to, so the confirmation and the
+result refer to the same place.
+
+### Rotating a production password
+
+```bash
+DATABASE_URL='<production URL>' RAZORSHIELD_PASSWORD='<new password>' RAZORSHIELD_CONFIRM_TARGET='<production host>' python scripts/manage_users.py set-password --email you@example.com
+```
+
+Run it from `backend/`. The password is read from the environment, never from
+argv — argv is visible in `ps`, shell history and container inspection. Nothing
+about the credential is logged or printed.
+
+### Finishing an interrupted bootstrap
+
+Running the bootstrap from a workstation avoids every constraint that makes the
+in-container run fragile: no 512 MB ceiling shared with the API process, no
+platform idle-timer, and the logs are in front of you.
+
+```bash
+DATABASE_URL='<production URL>' python scripts/bootstrap.py --status
+```
+
+```bash
+DATABASE_URL='<production URL>' python scripts/bootstrap.py
+```
+
+Every stage resumes rather than restarting, and a completed stage is a no-op, so
+this is safe to run against a database that is partly populated — which is what
+an interrupted run leaves behind.
 
 ---
 

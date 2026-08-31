@@ -134,7 +134,7 @@ def cmd_set_password(session: Session, args: argparse.Namespace) -> int:
     _validate(password)
     user.password_hash = hash_password(password)
     session.commit()
-    print(f"Password updated for {user.email}.")
+    print(f"Password updated for {user.email} in {_target_database()}.")
     return 0
 
 
@@ -218,6 +218,85 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+#: Commands that write. Read-only `list` is exempt from the confirmation below.
+_WRITE_COMMANDS = frozenset({"create", "set-password", "set-role", "deactivate"})
+
+
+def _target_database() -> str:
+    """``user@host:port/database`` for the configured connection. Never the password."""
+    from urllib.parse import urlparse
+
+    from app.core.config import get_settings
+
+    parsed = urlparse(get_settings().database_url)
+    host = parsed.hostname or "?"
+    port = f":{parsed.port}" if parsed.port else ""
+    return f"{parsed.username or '?'}@{host}{port}/{(parsed.path or '/?').lstrip('/')}"
+
+
+def _confirm_target(command: str) -> None:
+    """Name the database before writing to it, and stop if it is not local.
+
+    This script has no database of its own: it resolves ``DATABASE_URL`` exactly
+    as the API does, so the same command edits local PostgreSQL or the
+    production database depending only on an environment variable that is not
+    visible in the command being typed. That is the intended way to administer
+    production - and it is also how someone changes a password in the wrong
+    environment and concludes the change "did not work".
+
+    So a write against anything other than a local host prints the target and
+    requires it to be confirmed. ``RAZORSHIELD_CONFIRM_TARGET`` accepts the
+    hostname up front for a non-interactive run.
+    """
+    if command not in _WRITE_COMMANDS:
+        return
+
+    from urllib.parse import urlparse
+
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    host = (urlparse(settings.database_url).hostname or "").lower()
+
+    # `postgres` is the Docker Compose service name; inside the compose network
+    # that is still the local stack.
+    if host in {"localhost", "127.0.0.1", "::1", "postgres", "razorshield-postgres", ""}:
+        return
+
+    target = _target_database()
+    print(f"Target database : {target}")
+    print(f"Environment     : {settings.environment}")
+    print("This is not a local database. The change will apply there, not to local PostgreSQL.")
+
+    preapproved = os.environ.get("RAZORSHIELD_CONFIRM_TARGET")
+    if preapproved:
+        if preapproved == host:
+            print(f"Confirmed by RAZORSHIELD_CONFIRM_TARGET={host}.")
+            return
+        raise SystemExit(
+            f"RAZORSHIELD_CONFIRM_TARGET={preapproved!r} does not match the target host {host!r}."
+        )
+
+    refusal = (
+        "Refusing to write to a non-local database without confirmation. "
+        f"Re-run with RAZORSHIELD_CONFIRM_TARGET={host}"
+    )
+    if not sys.stdin.isatty():
+        raise SystemExit(refusal)
+
+    try:
+        answer = input(f"Type the host to continue ({host}): ").strip()
+    except EOFError:
+        # `isatty()` is not reliable everywhere - notably a Windows shell with
+        # stdin redirected reports a terminal and then has nothing to read.
+        # Reaching EOF here means nobody is present to confirm, which is the
+        # same situation the check above is for.
+        raise SystemExit(refusal) from None
+
+    if answer != host:
+        raise SystemExit("Not confirmed; nothing was changed.")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     handlers = {
@@ -227,6 +306,7 @@ def main(argv: list[str] | None = None) -> int:
         "set-role": cmd_set_role,
         "deactivate": cmd_deactivate,
     }
+    _confirm_target(args.command)
     with SessionLocal() as session:
         return handlers[args.command](session, args)
 

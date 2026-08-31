@@ -58,6 +58,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 # Allow `python scripts/bootstrap.py` from the backend directory.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -87,13 +88,27 @@ from app.services.auth import find_user_by_email  # noqa: E402
 
 logger = logging.getLogger("bootstrap")
 
-#: Default dataset size for a bootstrap run. Deliberately far below the 20,000
-#: of ``scripts/seed_data.py``. That number is sized for model training on a
-#: local PostgreSQL; this one has to seed, score twice and decide over a network
-#: hop to a managed database, inside a platform's start-up window. 3,000 is
-#: enough for every dashboard aggregate, the trend chart and the explorer's
-#: pagination to be meaningful, and completes in a couple of minutes.
-DEFAULT_TRANSACTIONS = 3_000
+
+#: Default dataset size for a bootstrap run: the same number
+#: ``scripts/seed_data.py`` uses, read from :class:`SeedConfig` rather than
+#: restated here.
+#:
+#: This was previously a literal 3,000, chosen so a bootstrap would finish
+#: quickly inside a small host's start-up window. The cost of that shortcut was
+#: two entry points to the same generator disagreeing about what the dataset
+#: is: a local `seed_data.py` produced 20,000 transactions and a deployment
+#: produced 3,000, with nothing in either place saying so. The environments then
+#: disagreed about every aggregate on the dashboard.
+#:
+#: One default, one source of truth. A host that genuinely cannot seed 20,000 -
+#: a 512 MB free instance seeding across a network hop to a managed database -
+#: sets ``BOOTSTRAP_TRANSACTIONS`` explicitly, which is a decision someone made
+#: and can see, rather than a difference nobody knew about.
+def _default_transactions() -> int:
+    from app.seed import SeedConfig
+
+    return SeedConfig().transactions
+
 
 #: How many of the highest-risk transactions to investigate during a
 #: bootstrap. Only those the policy's own gate accepts are actually run, so
@@ -101,6 +116,11 @@ DEFAULT_TRANSACTIONS = 3_000
 #: an investigation is the one stage that can call a language model: free
 #: under the default mock provider, metered against a real one.
 DEFAULT_INVESTIGATIONS = 200
+
+#: Rows the Phase 4 batch scorer writes per transaction - a behavioural
+#: anomaly score and a customer-relative deviation. Used to tell a finished
+#: signal stage from an interrupted one.
+SIGNALS_PER_TRANSACTION = 2
 
 #: Same floor as ``scripts/manage_users.py``. Below this, bcrypt's cost stops
 #: mattering because the search space is small enough to enumerate.
@@ -209,14 +229,76 @@ def upgrade_schema() -> None:
 # --------------------------------------------------------------------------
 # Stage 2 - dataset
 # --------------------------------------------------------------------------
+def _snapshot_real_accounts(session: Session) -> list[dict[str, Any]]:
+    """Capture the accounts a person could actually sign in with.
+
+    ``seed_database`` opens by truncating every simulation table, and ``users``
+    is on that list - the generator owns the four operator rows it creates. On a
+    fresh deployment that is harmless, because the table is empty.
+
+    It is not harmless here, and this is not hypothetical: the production
+    database was bootstrapped *after* people had already signed up through the
+    console, so "transactions is empty" was true while real accounts existed.
+    The seed deleted them. The symptom was an account that had worked minutes
+    earlier being rejected at login, with a signup for the same address
+    returning 201 rather than 409 - the row was gone, not the password wrong.
+
+    Only rows with a password hash are captured. The generator's own operator
+    accounts deliberately have none, so they are left to be regenerated rather
+    than accumulating a duplicate set on every reseed.
+    """
+    rows = session.execute(
+        select(
+            User.email,
+            User.password_hash,
+            User.full_name,
+            User.role,
+            User.is_active,
+            User.created_at,
+        ).where(User.password_hash.is_not(None))
+    ).all()
+    return [
+        {
+            "email": email,
+            "password_hash": password_hash,
+            "full_name": full_name,
+            "role": role,
+            "is_active": is_active,
+            "created_at": created_at,
+        }
+        for email, password_hash, full_name, role, is_active, created_at in rows
+    ]
+
+
+def _restore_real_accounts(session: Session, saved: list[dict[str, Any]]) -> int:
+    """Put back any captured account the seed removed, hash and role intact.
+
+    Addresses the seed happened to regenerate are skipped rather than
+    overwritten - restoring must not clobber a row that already exists.
+    """
+    if not saved:
+        return 0
+
+    present = set(session.scalars(select(User.email)))
+    missing = [row for row in saved if row["email"] not in present]
+    for row in missing:
+        session.add(User(**row))
+    if missing:
+        session.flush()
+    return len(missing)
+
+
 def seed_dataset(transactions: int, customers: int | None = None) -> int:
     """Generate the payment universe, but only into an empty database.
 
     The caller has already checked that ``transactions`` is zero. That check is
     repeated here, inside the same session that does the work, because the
-    generator's first act is to truncate every simulation table - including
-    ``users``. A redeploy that raced the check and wiped the operator accounts
-    would be a far worse outcome than a bootstrap that declines to run.
+    generator's first act is to truncate every simulation table. A redeploy that
+    raced the check and rebuilt a populated database would be a far worse
+    outcome than a bootstrap that declines to run.
+
+    Real accounts are carried across that truncation - see
+    :func:`_snapshot_real_accounts` for why that is not optional.
     """
     from app.seed import SeedConfig, seed_database
     from app.seed.runner import format_summary
@@ -231,8 +313,18 @@ def seed_dataset(transactions: int, customers: int | None = None) -> int:
         if _count(session, Transaction) > 0:
             logger.info("[2/7] dataset: transactions already present, refusing to reseed")
             return 0
+
+        preserved = _snapshot_real_accounts(session)
+        if preserved:
+            logger.info(
+                "[2/7] dataset: carrying %d sign-in-capable account(s) across the reseed",
+                len(preserved),
+            )
         try:
             result = seed_database(session, config)
+            restored = _restore_real_accounts(session, preserved)
+            if restored:
+                logger.info("[2/7] dataset: restored %d account(s)", restored)
             session.commit()
         except SeedValidationError as exc:
             session.rollback()
@@ -310,6 +402,20 @@ def investigate_backlog(cap: int) -> int:
     investigation is the one stage that can call a language model. With the
     default ``LLM_PROVIDER=mock`` it is fast and free; against a real provider
     it is neither, which is why the cap is a knob and not a constant.
+
+    RESUMABILITY
+
+    This stage used to skip itself entirely when *any* investigation existed.
+    That is fine on a run that completes and wrong on one that does not, and a
+    long stage on a small host does not always complete: the production
+    bootstrap stopped at 75 investigations, and every restart afterwards saw
+    "investigations exist" and skipped straight past - so the decision stage
+    behind it never ran, and the dashboard sat at 3,000 transactions and 0
+    decisions indefinitely.
+
+    Candidates that already have an investigation are now excluded by the query
+    instead, so a re-run continues from where the last one stopped and a
+    completed run is a no-op.
     """
     from app.services import investigation as investigation_service
     from app.services.decision import build_context
@@ -321,20 +427,29 @@ def investigate_backlog(cap: int) -> int:
     skipped = 0
 
     with SessionLocal() as session:
-        already = session.scalar(select(Investigation.transaction_id).limit(1))
-        if already is not None:
-            logger.info("[5/7] investigations: already present, skipping")
+        done = _count(session, Investigation)
+        remaining = cap - done
+        if remaining <= 0:
+            logger.info(
+                "[5/7] investigations: %d already stored, at the cap of %d, skipping", done, cap
+            )
             return 0
 
         candidates = list(
             session.scalars(
                 select(Transaction)
                 .join(RiskPrediction, RiskPrediction.transaction_id == Transaction.id)
+                .outerjoin(Investigation, Investigation.transaction_id == Transaction.id)
+                .where(Investigation.id.is_(None))
                 .order_by(RiskPrediction.fraud_probability.desc())
-                .limit(cap)
+                .limit(remaining)
             )
         )
-        logger.info("[5/7] investigations: %d candidate(s) by supervised risk", len(candidates))
+        logger.info(
+            "[5/7] investigations: %d already stored, %d further candidate(s) by supervised risk",
+            done,
+            len(candidates),
+        )
 
         for transaction in candidates:
             context = build_context(session, transaction)
@@ -509,25 +624,45 @@ def run(transactions: int, investigations: int, *, skip_schema: bool, force_deci
     else:
         logger.info("[2/7] dataset: %d transactions already present, skipping", counts.transactions)
 
-    if counts.predictions == 0:
+    # Every gate below compares against the transaction count rather than
+    # against zero. "Some rows exist" is not the same as "this stage finished",
+    # and treating the two as equivalent is what left production wedged: an
+    # interrupted run had written 75 investigations, so every later start
+    # skipped the stage, and the decision stage behind it never ran.
+    #
+    # Scoring re-runs are safe to repeat: both batch scorers replace a
+    # transaction's rows rather than appending to them.
+    if counts.predictions < counts.transactions:
+        logger.info(
+            "[3/7] predictions: %d of %d stored, scoring",
+            counts.predictions,
+            counts.transactions,
+        )
         logger.info("[3/7] predictions: scored %d transaction(s)", score_fraud())
     else:
-        logger.info("[3/7] predictions: %d already stored, skipping", counts.predictions)
+        logger.info("[3/7] predictions: %d complete, skipping", counts.predictions)
 
-    if counts.signals == 0:
+    # Two signals per transaction: a behavioural score and a customer-relative
+    # deviation, both written together by the Phase 4 batch scorer.
+    if counts.signals < counts.transactions * SIGNALS_PER_TRANSACTION:
+        logger.info(
+            "[4/7] signals: %d of %d stored, scoring",
+            counts.signals,
+            counts.transactions * SIGNALS_PER_TRANSACTION,
+        )
         logger.info("[4/7] signals: scored %d transaction(s)", score_anomalies())
     else:
-        logger.info("[4/7] signals: %d already stored, skipping", counts.signals)
+        logger.info("[4/7] signals: %d complete, skipping", counts.signals)
 
-    if counts.investigations == 0:
-        investigate_backlog(investigations)
-    else:
-        logger.info("[5/7] investigations: %d already stored, skipping", counts.investigations)
+    investigate_backlog(investigations)
 
-    if counts.decisions == 0 or force_decisions:
+    if counts.decisions < counts.transactions or force_decisions:
+        logger.info(
+            "[6/7] decisions: %d of %d stored, deciding", counts.decisions, counts.transactions
+        )
         logger.info("[6/7] decisions: %s", decide_backlog())
     else:
-        logger.info("[6/7] decisions: %d already stored, skipping", counts.decisions)
+        logger.info("[6/7] decisions: %d complete, skipping", counts.decisions)
 
     ensure_accounts()
 
@@ -552,8 +687,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--transactions",
         type=int,
-        default=int(os.environ.get("BOOTSTRAP_TRANSACTIONS", DEFAULT_TRANSACTIONS)),
-        help=f"dataset size when seeding an empty database (default {DEFAULT_TRANSACTIONS})",
+        default=int(os.environ.get("BOOTSTRAP_TRANSACTIONS") or _default_transactions()),
+        help=(
+            "dataset size when seeding an empty database "
+            f"(default {_default_transactions():,}, the same as scripts/seed_data.py)"
+        ),
     )
     parser.add_argument(
         "--investigations",
