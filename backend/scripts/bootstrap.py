@@ -117,6 +117,17 @@ def _default_transactions() -> int:
 #: under the default mock provider, metered against a real one.
 DEFAULT_INVESTIGATIONS = 200
 
+#: How long stage 5 may spend before handing the run on, in seconds.
+#:
+#: A ceiling on the *work* is not a ceiling on the *time*: 125 remaining
+#: candidates against a language model that answers in 60s is over two hours,
+#: and no free instance stays up that long. The count knob bounds spend; this
+#: one bounds the window, which is what actually decides whether the decision
+#: stage behind it is ever reached. Five minutes is comfortably enough for the
+#: default mock provider to exhaust the cap, and short enough that a real one
+#: cannot hold the run open indefinitely.
+DEFAULT_INVESTIGATION_SECONDS = 300
+
 #: Rows the Phase 4 batch scorer writes per transaction - a behavioural
 #: anomaly score and a customer-relative deviation. Used to tell a finished
 #: signal stage from an interrupted one.
@@ -377,7 +388,7 @@ def score_anomalies() -> int:
 # --------------------------------------------------------------------------
 # Stage 5 - investigations
 # --------------------------------------------------------------------------
-def investigate_backlog(cap: int) -> int:
+def investigate_backlog(cap: int, budget_seconds: int | None = None) -> int:
     """Run Phase 5 over the backlog the policy would have wanted investigated.
 
     WHY THE BACKLOG NEEDS THIS AND THE SEED DID NOT
@@ -416,6 +427,21 @@ def investigate_backlog(cap: int) -> int:
     Candidates that already have an investigation are now excluded by the query
     instead, so a re-run continues from where the last one stopped and a
     completed run is a no-op.
+
+    WHY THERE IS ALSO A TIME BUDGET
+
+    Resumability alone fixes the skip but not the wedge. This stage is the only
+    one that makes network calls to a language model, so it is the only one
+    whose duration is set by something outside this process; the stages behind
+    it - decisions, and the operator account - are fast and are what the console
+    actually needs. Left unbounded, a slow provider means the platform stops the
+    run inside stage 5 again, and stage 6 is never reached no matter how neatly
+    stage 5 resumes.
+
+    So the stage yields: it stops at ``budget_seconds`` and hands what is left
+    to the next run. Fewer investigations is a defined outcome - the policy
+    downgrades a block it cannot corroborate to a review - while no decisions at
+    all is not.
     """
     from app.services import investigation as investigation_service
     from app.services.decision import build_context
@@ -451,12 +477,33 @@ def investigate_backlog(cap: int) -> int:
             len(candidates),
         )
 
+        # Resolved here rather than in the signature so the default stays a
+        # single named constant that a caller - or a test - can move.
+        budget = DEFAULT_INVESTIGATION_SECONDS if budget_seconds is None else budget_seconds
+        deadline = time.perf_counter() + budget
         for transaction in candidates:
-            context = build_context(session, transaction)
-            if not investigation_warranted(context, policy):
-                skipped += 1
-                continue
+            # Stop cleanly rather than being stopped. The next run resumes from
+            # here - candidates already investigated are excluded by the query
+            # above - and the stages behind this one still get their turn on
+            # this one. An investigation stage that runs until the platform
+            # kills the process is how the backlog stayed undecided.
+            if time.perf_counter() >= deadline:
+                logger.info(
+                    "[5/7] investigations: %ds budget reached after %d; leaving the rest "
+                    "for the next run so the decision stage is not starved",
+                    budget,
+                    investigated,
+                )
+                break
             try:
+                # Inside the guard, not before it: assembling a context reads
+                # the customer behind the transaction, and a row whose context
+                # cannot be built is exactly as skippable as one whose
+                # investigation fails. Outside the guard it ended the stage.
+                context = build_context(session, transaction)
+                if not investigation_warranted(context, policy):
+                    skipped += 1
+                    continue
                 investigation_service.run_investigation(session, transaction)
                 investigated += 1
             except Exception as exc:  # noqa: BLE001 - one bad row must not end the run
@@ -600,7 +647,14 @@ def ensure_accounts() -> list[str]:
 # --------------------------------------------------------------------------
 # Orchestration
 # --------------------------------------------------------------------------
-def run(transactions: int, investigations: int, *, skip_schema: bool, force_decisions: bool) -> int:
+def run(
+    transactions: int,
+    investigations: int,
+    *,
+    skip_schema: bool,
+    force_decisions: bool,
+    investigation_seconds: int | None = None,
+) -> int:
     settings = get_settings()
     logger.info(
         "Bootstrapping RazorShield AI (environment=%s, service=%s)",
@@ -654,7 +708,27 @@ def run(transactions: int, investigations: int, *, skip_schema: bool, force_deci
     else:
         logger.info("[4/7] signals: %d complete, skipping", counts.signals)
 
-    investigate_backlog(investigations)
+    # Stage 5 enriches; stage 6 is what the console reads. Running the second
+    # after the first is deliberate and stays that way - a decision that can
+    # cite an investigation is a better decision, and the policy will not block
+    # without one. Letting the first *prevent* the second is a different thing
+    # entirely, and it is what wedged production: an enrichment stage that talks
+    # to a language model is the most likely stage to fail, and it sat in front
+    # of the only stage the dashboard reads and the stage that creates the
+    # operator account.
+    #
+    # So its failure is contained here. The traceback is logged in full because
+    # a stage that silently degrades is its own incident later; the run then
+    # continues, and every transaction without a usable investigation is decided
+    # on the signals that do exist.
+    try:
+        investigate_backlog(investigations, investigation_seconds)
+    except Exception:
+        logger.exception(
+            "[5/7] investigations: stage failed; continuing to decisions. Transactions "
+            "without a usable investigation are decided on the signals that exist, which "
+            "the policy handles by downgrading a block it cannot corroborate to a review."
+        )
 
     if counts.decisions < counts.transactions or force_decisions:
         logger.info(
@@ -702,6 +776,18 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--investigation-seconds",
+        type=int,
+        default=int(
+            os.environ.get("BOOTSTRAP_INVESTIGATION_SECONDS", DEFAULT_INVESTIGATION_SECONDS)
+        ),
+        help=(
+            "how long Phase 5 may run before handing the rest of the backlog to the "
+            "next run, so the decision stage is always reached "
+            f"(default {DEFAULT_INVESTIGATION_SECONDS}s)"
+        ),
+    )
+    parser.add_argument(
         "--status", action="store_true", help="report what is present and exit without writing"
     )
     parser.add_argument(
@@ -733,6 +819,7 @@ def main(argv: list[str] | None = None) -> int:
             args.investigations,
             skip_schema=args.skip_schema,
             force_decisions=args.force_decisions,
+            investigation_seconds=args.investigation_seconds,
         )
     except BootstrapError as exc:
         logger.error("Bootstrap failed: %s", exc)

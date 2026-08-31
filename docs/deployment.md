@@ -205,6 +205,50 @@ A bootstrap failure is logged and does not stop the API. A backend that refuses
 to start because seeding failed takes authentication and health down with it,
 and leaves no way in to find out why.
 
+### Why stage 5 cannot hold up stage 6
+
+Stage 5 is the only stage that leaves the process — it calls a language model —
+and stage 6 is the only stage the console reads. They ran back to back with
+nothing between them, and that coupling produced the longest-lived fault this
+deployment has had: 3,000 transactions, 3,000 predictions, 6,000 signals, 75
+investigations and **0 decisions**, unchanged across restart after restart. The
+dashboard was not broken. It was reporting an empty `risk_decisions` correctly,
+because stage 6 had never once run to completion.
+
+Two things now keep the stages apart:
+
+- **A stage 5 failure is contained.** The traceback is logged in full and the
+  run continues to stage 6. A transaction with no usable investigation is
+  decided on the signals that do exist — a case the policy already defines, by
+  downgrading a block it cannot corroborate to a review.
+- **Stage 5 yields.** It stops after `BOOTSTRAP_INVESTIGATION_SECONDS`
+  (default 300) and leaves the rest of the backlog to the next run, which
+  resumes where it stopped. Capping the *number* of investigations bounds spend;
+  only capping the *clock* bounds how long the stages behind it wait, and on a
+  host that sleeps, "eventually" means never.
+
+Fewer investigations is a visible, self-correcting degradation. No decisions at
+all is an empty dashboard that reads like a data problem and is not.
+
+### Recovering a deployment that is stuck at zero decisions
+
+No backfill script and no SQL: the bootstrap is idempotent and already knows how
+to do this. Confirm the shape of the problem first —
+
+```bash
+python scripts/bootstrap.py --status
+```
+
+`decisions=0` with a non-zero `transactions` is the wedge. Then just run it:
+
+```bash
+python scripts/bootstrap.py
+```
+
+Stages 2 to 4 are counted and skipped, stage 5 does what fits in its budget, and
+stage 6 decides the backlog and opens the review cases that come with it. Both
+commands are safe to repeat; neither reseeds a populated database.
+
 ### Running it by hand
 
 From the Render Shell, or locally with `DATABASE_URL` pointed at production:
