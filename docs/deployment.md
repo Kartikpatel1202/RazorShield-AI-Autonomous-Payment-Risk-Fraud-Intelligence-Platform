@@ -116,6 +116,30 @@ curl -s -o /dev/null -w "%{http_code}\n" https://razorshield-backend.onrender.co
 - Root directory: `frontend`
 - Build: `npm run build` · Output: `dist`
 - Environment: `VITE_API_BASE_URL=https://razorshield-backend.onrender.com`
+- Rewrites: `frontend/vercel.json` — every non-`/api/` path serves `index.html`
+
+`vercel.json` is read from the project's **root directory**, so it belongs in
+`frontend/`, beside `package.json`. A copy at the repository root is ignored.
+
+The rewrite is what makes a browser refresh on `/dashboard` work. The console is
+a client-rendered SPA: the only files that exist in `dist` are `index.html` and
+the hashed assets, so a direct request for `/dashboard` matches nothing on disk
+and Vercel answers `404: NOT_FOUND` before React ever loads. Navigating to the
+same route from inside the app works because that never leaves the page — it is
+a `history.pushState`, not a request. This is the identical job that
+`try_files $uri $uri/ /index.html` does in `frontend/default.conf.template` for
+the Docker deployment. The container had the fallback; Vercel did not.
+
+The `(?!api/)` exclusion keeps the fallback away from `/api/*`. Nothing serves
+that prefix on Vercel — the API is a separate Render origin, named by
+`VITE_API_BASE_URL` — and the exclusion is what keeps the failure honest: if
+that variable were ever unset or pointed at the console's own origin, a
+catch-all would answer every API call with `index.html` and `200`, turning a
+configuration mistake into `Unexpected token '<'` in the JSON parser. Excluded,
+those requests 404 and say what actually went wrong.
+
+Rewrites are evaluated only after the filesystem check, so `/assets/*` and
+`/shield.svg` continue to be served as real files.
 
 Only `VITE_`-prefixed variables reach the browser, and everything that does is
 compiled into a public bundle. `VITE_API_BASE_URL` is a URL and is safe there.
